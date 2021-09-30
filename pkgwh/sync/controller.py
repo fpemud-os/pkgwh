@@ -12,7 +12,6 @@ from collections import OrderedDict
 import pkgwh
 from pkgwh import os
 from pkgwh.progress import ProgressBar
-#from pkgwh.emaint.defaults import DEFAULT_OPTIONS
 from pkgwh.util import writemsg, writemsg_level
 from pkgwh.output import create_color_func
 good = create_color_func("GOOD")
