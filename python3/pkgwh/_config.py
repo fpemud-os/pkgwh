@@ -31,6 +31,14 @@ from ._exception import ConfigError
 class Config:
 
     @property
+    def cfg_repo_dir(self):
+        raise NotImplementedError()
+
+    @property
+    def cfg_repo_patch_dir(self):
+        raise NotImplementedError()
+
+    @property
     def data_repo_dir(self):
         raise NotImplementedError()
 
@@ -84,7 +92,9 @@ class EtcDirConfig(Config):
         self._makeConf = os.path.join(cfgdir, "make.conf")
 
         self._profileDir = os.path.join(cfgdir, "make.profile")
-        self._reposDir = os.path.join(cfgdir, "repos.conf")
+
+        self._cfgRepoDir = os.path.join(cfgdir, "repos.conf")
+        self._cfgRepoPatchDir = os.path.join(cfgdir, "repos.patch")
 
         self._cfgAcceptKeywordsDir = os.path.join(cfgdir, "package.accept_keywords")
         self._cfgMaskDir = os.path.join(cfgdir, "package.mask")
@@ -110,8 +120,12 @@ class EtcDirConfig(Config):
         self._deprecateCfgMirrorsFile = os.path.join(cfgdir, "mirrors")
 
     @property
-    def repos_dir(self):
-        return self._reposDir
+    def cfg_repo_dir(self):
+        return self._cfgRepoDir
+
+    @property
+    def cfg_repo_patch_dir(self):
+        return self._cfgRepoPatchDir
 
     @property
     def data_repo_dir(self):

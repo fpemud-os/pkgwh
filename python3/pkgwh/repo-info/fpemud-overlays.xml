@@ -7,6 +7,10 @@
     <source type="git">https://github.com/mirrorshq/gentoo-overlay.git</source>
   </repo>
   <repo quality="experimental" status="unofficial">
+    <name>bombyx-netutils</name>
+    <source type="git">https://gitee.com/bombyx-netutils/gentoo-overlay.git</source>
+  </repo>
+  <repo quality="experimental" status="unofficial">
     <name>fpemud-os</name>
     <source type="git">https://github.com/fpemud-os/gentoo-overlay.git</source>
   </repo>

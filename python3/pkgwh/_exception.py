@@ -37,13 +37,5 @@ class FetchError(Exception):
     pass
 
 
-class KernelInstallError(Exception):
-    pass
-
-
-class InitramfsInstallError(Exception):
-    pass
-
-
-class BootloaderInstallError(Exception):
+class PackageInstallError(Exception):
     pass

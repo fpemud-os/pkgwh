@@ -30,6 +30,12 @@ import robust_layer.simple_fops
 
 class Repo:
 
+    PRIORITY_MAX = 9999
+    PRIORITY_CORE = 9000
+    PRIORITY_ADDON_OFFICIAL = 8000
+    PRIORITY_ADDON_UNOFFICIAL = 7000
+    PRIORITY_MIN = 0
+
     def __init__(self, pkgwh, name):
         self._pkgwh = pkgwh
         self._repoName = name
@@ -38,64 +44,85 @@ class Repo:
         self._syncInfo = None
         self._usingFilesDir = None
         self._innerRepoName = None
+        self._hideList = None
+        self._unhideList = None
+        self._patchDirList = None
         self._invalidReason = None
         self._parse()
 
     def exists(self):
         return os.path.exists(self.repo_conf_file())
 
-    def is_valid(self):
+    def exists_and_valid(self):
         return self.exists() and self._invalidReason is None
 
     @property
     def repo_conf_file(self):
-        assert self.is_valid()
+        assert self.exists_and_valid()
         return _repoConfFile(self._pkgwh, self._repoName)
 
     @property
     def repo_dir(self):
-        assert self.is_valid()
+        assert self.exists_and_valid()
         return _repoDir(self._pkgwh, self._repoName)
 
     @property
     def priority(self):
-        assert self.is_valid()
+        assert self.exists_and_valid()
         return self._priority
 
     @property
     def sync_info(self):
-        assert self.is_valid()
+        assert self.exists_and_valid()
         return self._syncInfo
 
     def get_metadata(self, key):
         # meta-data:
         #   1. repo-name: XXXX
-        assert self.is_valid()
+        assert self.exists_and_valid()
 
         if key == "repo-name":
             return self._innerRepoName
         else:
             assert False
 
-    def get_files_dir(self):
-        assert self.is_valid()
-        if self._usingFilesDir:
-            return _repoFilesDir(self._pkgwh, self._repoName)
-        else:
-            return None
-
     def get_invalid_reason(self):
-        assert not self.is_valid()
+        assert not self.exists_and_valid()
         return self._invalidReason
 
-    def sync(self, quiet=False):
-        if self._repoName == "gentoo":
-            self._repoGentooSync(self.getRepoDir("gentoo"))
+    def create(self, priority=None, sync_type=None, sync_info=None):
+        # Business exception should not be raise, but be printed as error message
+        assert priority is None or (self.PRIORITY_MAX >= priority >= self.PRIORITY_MIN)
+        assert sync_type is None or sync_info is None
+        assert not self.exists()
+
+        buf = self._generateCfgReposFileContent()       # may raise exception
+        with open(self.repo_conf_file, "w") as f:
+            f.write(buf)
+
+        self.sync()
+
+    def sync(self):
+        # Business exception should not be raise, but be printed as error message
+        assert self.exists()
+
+        if self._syncInfo is None:
+            robust_layer.simple_fops.mkdir(self.repo_dir)
+        elif self._syncInfo.name == RepoSyncInfo.RSYNC:
+            _RepoSyncRsync.sync(self)
+        elif self._syncInfo.name == RepoSyncInfo.GIT:
+            _RepoSyncGit.sync(self)
+        elif self._syncInfo.name == RepoSyncInfo.SUBVERSION:
+            _RepoSyncSubversion.sync(self)
         else:
-            if self._repoName in self._repoGitUrlDict:
-                robust_layer.simple_git.pull(self.getRepoDir(self._repoName), reclone_on_failure=True, url=self._repoGitUrlDict[self._repoName])
-            else:
-                assert False
+            assert False
+
+
+
+
+
+
+
 
         if self.__hasPatch(self._repoName):
             print("Patching...")
@@ -109,19 +136,28 @@ class Repo:
             return
 
         buf = pathlib.Path(self.repo_conf_file).read_text()
+        lineList = buf.split("\n")
         try:
+            # innerRepoName
             m = re.search("^\\[(.*)\\]$", buf, re.M)
             if m is not None:
                 innerRepoName = m.group(1)
             else:
                 raise _InternalParseError("invalid repos.conf file")
 
+            # priority
             m = re.search("^priority *= *(.*)$", buf, re.M)
             if m is not None:
-                priority = m.group(1)
+                try:
+                    priority = int(m.group(1))
+                except ValueError:
+                    raise _InternalParseError("invalid \"priority\" in repos.conf file")
+                if not (self.PRIORITY_MAX >= priority >= self.PRIORITY_MIN):
+                    raise _InternalParseError("invalid \"priority\" in repos.conf file")
             else:
                 raise _InternalParseError("no \"priority\" in repos.conf file")
 
+            # location
             m = re.search("^location *= *(.*)$", buf, re.M)
             if m is not None:
                 location = m.group(1)
@@ -130,50 +166,101 @@ class Repo:
             else:
                 raise _InternalParseError("no \"location\" in repos.conf file")
 
-            m = re.search("^sync-type *= *(.*)$", buf, re.M)
-            if m is not None:
-                vcsType = m.group(1)
-            else:
-                vcsType = None
+            # syncInfo
+            if True:
+                m = re.search("^sync-type *= *(.*)$", buf, re.M)
+                if m is not None:
+                    vcsType = m.group(1)
+                else:
+                    vcsType = None
 
-            m = re.search("^sync-uri *= *(.*)$", buf, re.M)
-            if m is not None:
-                overlayUrl = m.group(1)
-            else:
-                overlayUrl = None
+                m = re.search("^sync-uri *= *(.*)$", buf, re.M)
+                if m is not None:
+                    overlayUrl = m.group(1)
+                else:
+                    overlayUrl = None
 
-            if vcsType is None:
-                syncInfo = None
-            elif vcsType == RepoSyncInfo.RSYNC:
-                if not overlayUrl.startswith("rsync://"):
-                    raise _InternalParseError("invalid \"sync-url\" in repos.conf file")
-                syncInfo = RepoSyncInfoRsync(overlayUrl)
-            elif vcsType == RepoSyncInfo.GIT:
-                if not (overlayUrl.startswith("git://") or overlayUrl.startswith("http://") or overlayUrl.startswith("https://")):
-                    raise _InternalParseError("invalid \"sync-url\" in repos.conf file")
-                syncInfo = RepoSyncInfoGit(overlayUrl)
-            elif vcsType == RepoSyncInfo.SUBVERSION:
-                if not (overlayUrl.startswith("http://") or overlayUrl.startswith("https://")):
-                    raise _InternalParseError("invalid \"sync-url\" in repos.conf file")
-                syncInfo = RepoSyncInfoGit(overlayUrl)
-            else:
-                raise _InternalParseError("invalid \"sync-type\" in repos.conf file")
+                if vcsType is None:
+                    syncInfo = None
+                elif vcsType == RepoSyncInfo.RSYNC:
+                    if not overlayUrl.startswith("rsync://"):
+                        raise _InternalParseError("invalid \"sync-url\" in repos.conf file")
+                    syncInfo = RepoSyncInfoRsync(overlayUrl)
+                elif vcsType == RepoSyncInfo.GIT:
+                    if not (overlayUrl.startswith("git://") or overlayUrl.startswith("http://") or overlayUrl.startswith("https://")):
+                        raise _InternalParseError("invalid \"sync-url\" in repos.conf file")
+                    syncInfo = RepoSyncInfoGit(overlayUrl)
+                elif vcsType == RepoSyncInfo.SUBVERSION:
+                    if not (overlayUrl.startswith("http://") or overlayUrl.startswith("https://")):
+                        raise _InternalParseError("invalid \"sync-url\" in repos.conf file")
+                    syncInfo = RepoSyncInfoGit(overlayUrl)
+                else:
+                    raise _InternalParseError("invalid \"sync-type\" in repos.conf file")
 
-            fullfn = _repoDir(self._pkgwh, self._repoName)
-            if not os.path.isdir(fullfn):
-                raise _InternalParseError("\"%s\" does not exist or invalid" % (fullfn))
+            # hideList
+            hideList = None
+            for line in lineList:
+                if hideList is not None:
+                    if re.fullmatch("\\[package.hide\\]", line) is not None:
+                        hideList = []
+                else:
+                    if re.fullmatch("\\[(.*)\\]", line) is not None:
+                        break
+                    hideList.append(line.strip())
+            if hideList is None:
+                hideList = []
 
-            # FIXME: how to process files-dir?
+            # unhideList
+            unhideList = None
+            for line in lineList:
+                if unhideList is not None:
+                    if re.fullmatch("\\[package.unhide\\]", line) is not None:
+                        unhideList = []
+                else:
+                    if re.fullmatch("\\[(.*)\\]", line) is not None:
+                        break
+                    unhideList.append(line.strip())
+            if unhideList is None:
+                unhideList = []
+
+            # check repoDir
+            repoDir = _repoDir(self._pkgwh, self._repoName)
+            if not os.path.isdir(repoDir):
+                raise _InternalParseError("\"%s\" does not exist or invalid" % (repoDir))
 
             self._prioriry = priority
             self._syncInfo = syncInfo
             self._innerRepoName = innerRepoName
+            self._hideList = hideList
+            self._unhideList = unhideList
             self._invalidReason = None
         except _InternalParseError as e:
             self._prioriry = None
             self._syncInfo = None
             self._innerRepoName = None
+            self._hideList = None
+            self._unhideList = None
             self._invalidReason = e.message
+
+    def _generateCfgReposFileContent(self):
+        buf = ""
+        buf += "[%s]\n" % (self._innerRepoName)
+        buf += "priority = %s\n" % (self._priority)
+        buf += "location = %s\n" % (self.repo_dir)
+        if self._syncInfo is None:
+            pass
+        elif self._syncInfo.name == RepoSyncInfo.RSYNC:
+            buf += "sync-type = rsync\n"
+            buf += "sync-uri = %s\n" % (self._syncInfo.url)
+        elif self._syncInfo.name == RepoSyncInfo.GIT:
+            buf += "sync-type = rsync\n"
+            buf += "sync-uri = %s\n" % (self._syncInfo.url)
+        elif self._syncInfo.name == RepoSyncInfo.SUBVERSION:
+            buf += "sync-type = rsync\n"
+            buf += "sync-uri = %s\n" % (self._syncInfo.url)
+        else:
+            assert False
+        return buf
 
 
 class RepoSyncInfo:
@@ -208,6 +295,30 @@ class RepoSyncInfoGit(RepoSyncInfo):
         assert url.startswith("http://") or url.startswith("https://")
         super().__init__(RepoSyncInfo.SUBVERSION)
         self.url = url
+
+
+class _RepoSyncRsync:
+
+    @staticmethod
+    def sync(repo):
+        # we use "-rlptD" insead of "-a" so that the remote user/group is ignored
+        robust_layer.rsync.exec("-rlptD", "-z", "-hhh", "--no-motd", "--delete", "--info=progress2", repo.sync_info.url, repo.repo_dir)
+
+
+class _RepoSyncGit:
+
+    @staticmethod
+    def sync(repo):
+        robust_layer.simple_git.pull(repo.repo_dir, reclone_on_failure=True, url=repo.sync_info.url)
+
+
+class _RepoSyncSubversion:
+
+    @staticmethod
+    def sync(repo):
+        assert False
+
+
 
 
 class RepoCreator:
