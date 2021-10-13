@@ -1,3 +1,0 @@
-"""
-gentoo ebuild support
-"""
