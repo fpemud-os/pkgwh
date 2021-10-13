@@ -10,9 +10,8 @@ from datetime import datetime
 
 
 def downloadGentooOverlays():
-    selfDir = os.path.dirname(os.path.realpath(__file__))
     url = "https://api.gentoo.org/overlays/repositories.xml"
-    fullfn = os.path.join(selfDir, "..", "python3", "pkgwh", "repo-db", "gentoo-overlays.xml")
+    fullfn = os.path.join(Util.repoInfoDir(), "gentoo-overlays.xml")
 
     tm = None
     while True:
@@ -23,15 +22,21 @@ def downloadGentooOverlays():
         except lxml.etree.XMLSyntaxError as e:
             print("Failed to parse %s, %s" % (fullfn, e))
             robust_layer.simple_fops.rm(fullfn)
-            time.sleep(1.0)
+            time.sleep(robust_layer.RETRY_WAIT)
         except BaseException as e:
             print("Failed to acces %s, %s" % (url, e))
-            time.sleep(1.0)
+            time.sleep(robust_layer.RETRY_WAIT)
     print("Gentoo overlay database updated: %s" % (tm.strftime("%Y%m%d%H%M%S")))
 
 
 class Util:
 
+    @staticmethod
+    def repoInfoDir():
+        selfDir = os.path.dirname(os.path.realpath(__file__))
+        return os.path.join(selfDir, "..", "python3", "pkgwh", "repo-info")
+
+    @staticmethod
     def myParseXml(fullfn):
         cList = [
             ("git", "https"),
