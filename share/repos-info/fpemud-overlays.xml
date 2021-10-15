@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE repositories SYSTEM "http://www.gentoo.org/dtd/repositories.dtd">
+<repositories xmlns="" version="1.0">
+  <!-- for syntax please see gentoo-overlays.xml -->
+  <repo quality="experimental" status="unofficial">
+    <name>fpemud</name>
+    <source type="git">https://github.com/fpemud/fpemud-overlay.git</source>
+  </repo>
+  <!-- vim:se et sw=2 ts=2 sts=2 :-->
+</repositories>

@@ -34,8 +34,11 @@ __version__ = "0.0.1"
 
 from ._pkgwh import Pkgwh
 
-from ._po import KernelType
-from ._po import BootMode
+from ._po import RepoPriority
+from ._po import RepoSyncInfo
+from ._po import RepoSyncInfoRsync
+from ._po import RepoSyncInfoGit
+from ._po import RepoSyncInfoSubversion
 
 from ._config import Config
 from ._config import EtcDirConfig

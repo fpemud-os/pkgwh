@@ -58,23 +58,7 @@ class Pkgwh:
     def repositories(self):
         return self._repoList
 
-    def check_running_environment(self):
-        if not os.path.isdir(self._fsLayout.get_boot_dir()):
-            raise RunningEnvironmentError("directory \"%s\" does not exist" % (self._fsLayout.get_boot_dir()))
-        if not os.path.isdir(self._fsLayout.get_lib_dir()):
-            raise RunningEnvironmentError("directory \"%s\" does not exist" % (self._fsLayout.get_lib_dir()))
-
-        if not Util.cmdCallTestSuccess("make", "-v"):
-            raise RunningEnvironmentError("executable \"make\" does not exist")
-
-        if not Util.cmdCallTestSuccess("grub-script-check", "-V"):
-            raise RunningEnvironmentError("executable \"grub-script-check\" does not exist")
-        if not Util.cmdCallTestSuccess("grub-editenv", "-V"):
-            raise RunningEnvironmentError("executable \"grub-editenv\" does not exist")
-        if not Util.cmdCallTestSuccess("grub-install", "-V"):
-            raise RunningEnvironmentError("executable \"grub-install\" does not exist")
-
-    def get_package_tree(self):
+    def get_package_tree(self, including_masked=False):
         raise NotImplementedError()
 
     def get_installed_package_tree(self):
@@ -83,10 +67,8 @@ class Pkgwh:
     def install_package(self, package_atom):
         pass
 
-    def clean_packages(self, pretend=False):
-        # # return value
-        # return (bootFileList, modulesFileList, firmwareFileList)
-        pass
+    def clean_world(self, pretend=False):
+        return []                               # FIXME
 
     def clean_distfiles(self, pretend=False):
         return []                               # FIXME
@@ -98,4 +80,7 @@ class Pkgwh:
         pass
 
     def check_packages(self, autofix=False, error_callback=None):
+        pass
+
+    def find_cruft(self):
         pass

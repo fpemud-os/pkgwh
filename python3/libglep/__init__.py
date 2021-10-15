@@ -20,8 +20,18 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+"""
+pm_common
 
-import os
-import pathlib
+@author: Fpemud
+@license: GPLv3 License
+@contact: fpemud@sina.com
+"""
+
+__author__ = "fpemud@sina.com (Fpemud)"
+__version__ = "0.0.1"
 
 
+from ._atom import category_name_re, package_name_re, package_version_re
+from ._atom import is_valid_category, is_valid_package_name, is_valid_package_version, is_valid_package_revision, is_valid_repository_name
+from ._atom import CP, CPV, PkgAtom

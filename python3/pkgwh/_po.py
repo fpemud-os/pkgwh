@@ -23,108 +23,48 @@
 
 import os
 import re
-import anytree
 from ._util import Util
 from ._exception import RunningEnvironmentError
 
 
-class KernelType:
+class RepoPriority:
 
-    LINUX = "linux"
-
-
-class BootMode:
-
-    EFI = "efi"
-    BIOS = "bios"
+    MAX = 9999
+    CORE = 9000
+    ADDON_OFFICIAL = 8000
+    ADDON_UNOFFICIAL = 7000
+    MIN = 0
 
 
-class FsLayout:
+class RepoSyncInfo:
 
-    def __init__(self, bbki):
-        self._bbki = bbki
+    TYPE_RSYNC = 1
+    TYPE_GIT = 2
+    TYPE_SUBVERSION = 3
 
-    def get_boot_dir(self):
-        return "/boot"
-
-    def get_lib_dir(self):
-        return "/boot"
-
-    def get_boot_history_dir(self):
-        return "/boot/history"
-
-    def get_boot_grub_dir(self):
-        return "/boot/grub"
-
-    def get_boot_grub_efi_dir(self):
-        return "/boot/EFI"
-
-    def get_boot_rescue_os_dir(self):
-        return "/boot/rescue"
-
-    def get_boot_rescue_os_kernel_filepath(self):
-        return "/boot/rescue/vmlinuz"
-
-    def get_boot_rescue_os_initrd_filepath(self):
-        return "/boot/rescue/initrd.img"
-
-    def get_firmware_dir(self):
-        return "/lib/firmware"
+    def __init__(self, name):
+        self.name = name
 
 
-def _getUnderlayDisk(devPath, parent=None):
-    # HostDiskLvmLv
-    lvmInfo = Util.getBlkDevLvmInfo(devPath)
-    if lvmInfo is not None:
-        bdi = HostDiskLvmLv(Util.getBlkDevUuid(devPath), lvmInfo[0], lvmInfo[1], parent=parent)
-        for slaveDevPath in Util.lvmGetSlaveDevPathList(lvmInfo[0]):
-            _getUnderlayDisk(slaveDevPath, parent=bdi)
-        return bdi
+class RepoSyncInfoRsync(RepoSyncInfo):
 
-    # HostDiskPartition
-    m = re.fullmatch("(/dev/sd[a-z])[0-9]+", devPath)
-    if m is None:
-        m = re.fullmatch("(/dev/xvd[a-z])[0-9]+", devPath)
-        if m is None:
-            m = re.fullmatch("(/dev/vd[a-z])[0-9]+", devPath)
-            if m is None:
-                m = re.fullmatch("(/dev/nvme[0-9]+n[0-9]+)p[0-9]+", devPath)
-    if m is not None:
-        bdi = HostDiskPartition(Util.getBlkDevUuid(devPath), HostDiskPartition.PART_TYPE_MBR, parent=parent)        # FIXME: currently there's no difference when processing mbr and gpt partition
-        _getUnderlayDisk(m.group(1), parent=bdi)
-        return bdi
+    def __init__(self, url):
+        assert url.startswith("rsync://")
+        super().__init__(RepoSyncInfo.TYPE_RSYNC)
+        self.url = url
 
-    # HostDiskScsiDisk
-    m = re.fullmatch("/dev/sd[a-z]", devPath)
-    if m is not None:
-        return HostDiskScsiDisk(Util.getBlkDevUuid(devPath), Util.scsiGetHostControllerName(devPath), parent=parent)
 
-    # HostDiskXenDisk
-    m = re.fullmatch("/dev/xvd[a-z]", devPath)
-    if m is not None:
-        return HostDiskXenDisk(Util.getBlkDevUuid(devPath), parent=parent)
+class RepoSyncInfoGit(RepoSyncInfo):
 
-    # HostDiskVirtioDisk
-    m = re.fullmatch("/dev/vd[a-z]", devPath)
-    if m is not None:
-        return HostDiskVirtioDisk(Util.getBlkDevUuid(devPath), parent=parent)
+    def __init__(self, url):
+        assert url.startswith("git://") or url.startswith("http://") or url.startswith("https://")
+        super().__init__(RepoSyncInfo.TYPE_GIT)
+        self.url = url
 
-    # HostDiskNvmeDisk
-    m = re.fullmatch("/dev/nvme[0-9]+n[0-9]+", devPath)
-    if m is not None:
-        return HostDiskNvmeDisk(Util.getBlkDevUuid(devPath), parent=parent)
 
-    # HostDiskBcache
-    m = re.fullmatch("/dev/bcache[0-9]+", devPath)
-    if m is not None:
-        bdi = HostDiskBcache(Util.getBlkDevUuid(devPath), parent=parent)
-        slist = Util.bcacheGetSlaveDevPathList(devPath)
-        for i in range(0, len(slist)):
-            if i < len(slist) - 1:
-                bdi.add_cache_dev(_getUnderlayDisk(slist[i], parent=bdi))
-            else:
-                bdi.add_backing_dev(_getUnderlayDisk(slist[i], parent=bdi))
-        return bdi
+class RepoSyncInfoSubversion(RepoSyncInfo):
 
-    # unknown
-    raise RunningEnvironmentError("unknown device \"%s\"" % (devPath))
+    def __init__(self, url):
+        assert url.startswith("http://") or url.startswith("https://")
+        super().__init__(RepoSyncInfo.TYPE_SUBVERSION)
+        self.url = url

@@ -12,7 +12,6 @@ from datetime import datetime
 def downloadGentooOverlays():
     url = "https://api.gentoo.org/overlays/repositories.xml"
     fullfn = os.path.join(Util.repoInfoDir(), "gentoo-overlays.xml")
-
     tm = None
     while True:
         try:
@@ -34,7 +33,7 @@ class Util:
     @staticmethod
     def repoInfoDir():
         selfDir = os.path.dirname(os.path.realpath(__file__))
-        return os.path.join(selfDir, "..", "python3", "pkgwh", "repo-info")
+        return os.path.join(selfDir, "..", "python3", "pkgwh", "repos-info")
 
     @staticmethod
     def myParseXml(fullfn):
