@@ -82,7 +82,7 @@ class CP(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
         return self.category + "/" + self.package
 
     def __hash__(self):
-        return hash((self.category, self.package))
+        return hash(self._all_attrs())
 
     def __repr__(self):
         return '<%s key=%s @%#8x>' % (self.__class__.__name__, self.cp_str, id(self))
@@ -91,16 +91,13 @@ class CP(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
         return self.cp_str
 
     def __eq__(self, other):
-        try:
-            return self.category == other.category and self.package == other.package
-        except AttributeError:
-            raise TypeError(f"'==' not supported between instances of {self.__class__.__name__!r} and {other.__class__.__name__!r}")
+        return isinstance(other, CP) and self._all_attrs() == other._all_attrs()
 
     def __ne__(self, other):
-        try:
-            return self.category != other.category or self.package != other.package
-        except AttributeError:
-            raise TypeError(f"'!=' not supported between instances of {self.__class__.__name__!r} and {other.__class__.__name__!r}")
+        return not self.__eq__(other)
+
+    def _all_attrs(self):
+        return (self.category, self.package)
 
 
 class CPV(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
@@ -189,7 +186,7 @@ class CPV(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
         return self.cp_str + "-" + self.fullver
 
     def __hash__(self):
-        return hash((self.category, self.package, self.ver, self.rev))
+        return hash(self._all_attrs())
 
     def __repr__(self):
         return '<%s key=%s @%#8x>' % (self.__class__.__name__, self.cpv_str, id(self))
@@ -198,52 +195,44 @@ class CPV(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
         return self.cpv_str
 
     def __eq__(self, other):
-        try:
-            return self.category == other.category and self.package == other.package and self.ver == other.ver and self.rev == other.rev
-        except AttributeError:
-            raise TypeError(f"'==' not supported between instances of {self.__class__.__name__!r} and {other.__class__.__name__!r}")
+        return isinstance(other, CPV) and self._all_attrs() == other._all_attrs()
 
     def __ne__(self, other):
-        try:
-            return self.category != other.category or self.package != other.package or self.ver != other.ver or self.rev != other.rev
-        except AttributeError:
-            raise TypeError(f"'!=' not supported between instances of {self.__class__.__name__!r} and {other.__class__.__name__!r}")
+        return not self.__eq__(other)
 
     def __lt__(self, other):
-        try:
-            if self.category == other.category and self.package == other.package:
-                return package_fullver_cmp(self.version, self.revision, other.version, other.revision) < 0
-            else:
-                raise TypeError(f"'<' not supported between {self.cpv_str!r} and {other.cpv_str!r}")
-        except AttributeError:
+        if not isinstance(other, CPV):
             raise TypeError(f"'<' not supported between instances of {self.__class__.__name__!r} and {other.__class__.__name__!r}")
+        if self._cp_attrs() != other._cp_attrs():
+            raise TypeError(f"'<' not supported between {self.cpv_str!r} and {other.cpv_str!r}")
+        return package_fullver_cmp(self.version, self.revision, other.version, other.revision) < 0
 
     def __le__(self, other):
-        try:
-            if self.category == other.category and self.package == other.package:
-                return package_fullver_cmp(self.version, self.revision, other.version, other.revision) <= 0
-            else:
-                raise TypeError(f"'<=' not supported between {self.cpv_str!r} and {other.cpv_str!r}")
-        except AttributeError:
+        if not isinstance(other, CPV):
             raise TypeError(f"'<=' not supported between instances of {self.__class__.__name__!r} and {other.__class__.__name__!r}")
+        if self._cp_attrs() != other._cp_attrs():
+            raise TypeError(f"'<=' not supported between {self.cpv_str!r} and {other.cpv_str!r}")
+        return package_fullver_cmp(self.version, self.revision, other.version, other.revision) <= 0
 
     def __gt__(self, other):
-        try:
-            if self.category == other.category and self.package == other.package:
-                return package_fullver_cmp(self.version, self.revision, other.version, other.revision) > 0
-            else:
-                raise TypeError(f"'>' not supported between {self.cpv_str!r} and {other.cpv_str!r}")
-        except AttributeError:
+        if not isinstance(other, CPV):
             raise TypeError(f"'>' not supported between instances of {self.__class__.__name__!r} and {other.__class__.__name__!r}")
+        if self._cp_attrs() != other._cp_attrs():
+            raise TypeError(f"'>' not supported between {self.cpv_str!r} and {other.cpv_str!r}")
+        return package_fullver_cmp(self.version, self.revision, other.version, other.revision) > 0
 
     def __ge__(self, other):
-        try:
-            if self.category == other.category and self.package == other.package:
-                return package_fullver_cmp(self.version, self.revision, other.version, other.revision) >= 0
-            else:
-                raise TypeError(f"'>=' not supported between {self.cpv_str!r} and {other.cpv_str!r}")
-        except AttributeError:
+        if not isinstance(other, CPV):
             raise TypeError(f"'>=' not supported between instances of {self.__class__.__name__!r} and {other.__class__.__name__!r}")
+        if self._cp_attrs() != other._cp_attrs():
+            raise TypeError(f"'>=' not supported between {self.cpv_str!r} and {other.cpv_str!r}")
+        return package_fullver_cmp(self.version, self.revision, other.version, other.revision) >= 0
+
+    def _cp_attrs(self):
+        return (self.category, self.package)
+
+    def _all_attrs(self):
+        return (self.category, self.package, self.ver, self.rev)
 
 
 def package_fullver_cmp(ver1, rev1, ver2, rev2):
