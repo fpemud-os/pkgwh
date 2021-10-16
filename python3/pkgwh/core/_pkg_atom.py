@@ -47,13 +47,13 @@ class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
     :ivar blocks: bool has ! operator
     :ivar blocks_strongly: bool has !! operator
     :ivar op: str prefix operator, optional
-    :ivar category: str category name, may contain wildcard
-    :ivar package: str package name, may contain wildcard
+    :ivar category: str category name
+    :ivar package: str package name
     :ivar slot: str slot, optional
     :ivar slot_operator: str slot operator, optional
     :ivar subslot: str subslot, optional
     :ivar ver: str version, optional, may contain wildcard
-    :ivar rev: str revision, optional, may contain wildcard
+    :ivar rev: str revision, optional, may contain wildcard?
     :ivar fullver: str version-revision
     :ivar post_wildcard: bool has * postfix
     :ivar use: list USE flags, optional

@@ -21,6 +21,56 @@
 # THE SOFTWARE.
 
 
+class InvalidCP(ValueError):
+    """CP with unsupported characters or format."""
+
+    def __init__(self, cp_str, err=None):
+        self.atom = cp_str
+        self.err = err
+        super().__init__(str(self))
+
+    def __str__(self):
+        msg = f'invalid CP: {self.cp_str!r}'
+        if self.err is not None:
+            msg += f': {self.err}'
+        return msg
+
+
+class InvalidCPV(ValueError):
+    """CPV with unsupported characters or format."""
+
+    def __init__(self, cpv_str, err=None):
+        self.atom = cpv_str
+        self.err = err
+        super().__init__(str(self))
+
+    def __str__(self):
+        msg = f'invalid CPV: {self.cpv_str!r}'
+        if self.err is not None:
+            msg += f': {self.err}'
+        return msg
+
+
+class InvalidPkgWildcard(ValueError):
+    # FIXME
+    pass
+
+
+class InvalidPkgAtom(ValueError):
+    """Package atom doesn't follow required specifications."""
+
+    def __init__(self, atom, err=None):
+        self.atom = atom
+        self.err = err
+        super().__init__(str(self))
+
+    def __str__(self):
+        msg = f'invalid package atom: {self.atom!r}'
+        if self.err is not None:
+            msg += f': {self.err}'
+        return msg
+
+
 class RunningEnvironmentError(Exception):
     pass
 
