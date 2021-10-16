@@ -4,21 +4,36 @@ import re
 import string
 from snakeoil import klass
 from ... import errors
+from ._cpv import is_valid_category, is_valid_package_name, is_valid_package_version, is_valid_package_revision
 
 
 def is_valid_prefix_op(s):
     assert isinstance(s, str)
-    return s in _valid_ops
+    return (s in _valid_ops)
 
 
 def is_valid_repository(s):
     assert isinstance(s, str)
-    return _valid_repo_chars.issuperset(s)
+    if len(s) == 0:
+        return False
+    if s[0] == "-":
+        return False
+    if not _valid_repo_chars.issuperset(s):
+        return False
+    return True
 
 
 def is_valid_slot(s):
-    assert isinstance(s, str)
-    return _valid_slot_chars.issuperset(s)
+    assert isinstance(s, str) and len(s) > 0
+    if s[0] in ("-", "."):
+        return False
+    if not _valid_slot_chars.issuperset(s):
+        return False
+    return True
+
+
+def is_valid_subslot(s):
+    return is_valid_slot(s)                 # same as slot
 
 
 def is_valid_use_flag(s):
@@ -39,9 +54,10 @@ class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
     :ivar subslot: str subslot, optional
     :ivar ver: str version, optional, may contain wildcard
     :ivar rev: str revision, optional, may contain wildcard
+    :ivar fullver: str version-revision
+    :ivar post_wildcard: bool has * postfix
     :ivar use: list USE flags, optional
     :ivar repo_id: str repository name, optional
-    :ivar fullver: str version-revision
     :ivar key: str (category/package-version-revision)
     """
 
@@ -51,23 +67,16 @@ class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
         :keyword eapi: int controlling what eapi to enforce for this atom
         """
 
-        if eapi is not None and eapi <= 4:
-            raise ValueError("eapi {eapi!r} is not supported")
+        if eapi is not None:
+            assert eapi >= 0
+            if eapi <= 4:
+                raise ValueError("EAPI={eapi!r} is not supported")
 
         sf = object.__setattr__
         orig_atom = atom
 
-        # self.blocks and self.blocks_strongly
-        sf(self, "blocks", atom[0] == "!")
-        if self.blocks:
-            atom = atom[1:]
-            sf(self, "blocks_strongly", atom[0] == "!")
-            if self.blocks_strongly:
-                atom = atom[1:]
-
+        # self.use
         use_start = atom.find("[")
-        slot_start = atom.find(":")
-
         if use_start != -1:
             # use dep
             use_end = atom.find("]", use_start)
@@ -100,60 +109,61 @@ class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
                         raise errors.InvalidAtom(orig_atom, f'invalid USE flag: {x!r}')
                 except IndexError:
                     raise errors.InvalidAtom(orig_atom, 'empty use dep detected')
-            if override_kls:
-                sf(self, '__class__', transitive_use_atom)
-            atom = atom[0:use_start] + atom[use_end + 1:]
+            atom = atom[:use_start] + atom[use_end + 1:]
         else:
             sf(self, "use", None)
 
-        if slot_start != -1:
-            i2 = atom.find("::", slot_start)
-            if i2 != -1:
-                repo_id = atom[i2 + 2:]
-                if not repo_id:
-                    raise errors.InvalidAtom(orig_atom, "repo_id must not be empty")
-                elif repo_id[0] in '-':
-                    raise errors.InvalidAtom(orig_atom, f"invalid first char of repo_id '{repo_id}' (must not begin with a hyphen)")
-                elif not is_valid_repository(repo_id):
-                    raise errors.InvalidAtom(orig_atom, f"repo_id may contain only [a-Z0-9_-/], found {repo_id!r}")
-                atom = atom[:i2]
-                sf(self, "repo_id", repo_id)
-            else:
-                sf(self, "repo_id", None)
+        # self.repo_id
+        repo_id_start = atom.find("::")
+        if repo_id_start != -1:
+            repo_id = atom[repo_id_start+2:]
+            if repo_id == "":
+                raise errors.InvalidAtom(orig_atom, "repo_id must not be empty")
+            if not is_valid_repository(repo_id):
+                raise errors.InvalidAtom(orig_atom, f"invalid repo_id component: {repo_id!r}")
+            atom = atom[:repo_id_start]
+            sf(self, "repo_id", repo_id)
+        else:
+            sf(self, "repo_id", None)
 
+        # self.slot, self.slot_operator, self.subslot
+        slot_start = atom.find(":")
+        if slot_start != -1:
             # slot dep.
             slot = atom[slot_start+1:]
-            slot_operator = subslot = None
-            if not slot:
-                # if the slot char came in only due to repo_id, force slots to None
-                if i2 == -1:
-                    raise errors.InvalidAtom(orig_atom, "empty slot targets aren't allowed")
+            if slot == "":
+                raise errors.InvalidAtom(orig_atom, "empty slot targets aren't allowed")        # FIXME: targets->target?
+
+            if slot[0] in ("*", "="):
+                if len(slot) > 1:
+                    raise errors.InvalidAtom(orig_atom, "slot operators '*' and '=' do not take slot targets")
+                slot_operator = slot
                 slot = None
+                subslot = None
             else:
-                slots = (slot,)
-                if slot[0:1] in ("*", "="):
-                    if len(slot) > 1:
-                        raise errors.InvalidAtom(orig_atom, "Slot operators '*' and '=' do not take slot targets")
-                    slot_operator = slot
-                    slot, slots = None, ()
+                if slot[-1] == '=':
+                    slot = slot[:-1]
+                    slot_operator = '='
                 else:
-                    if slot.endswith('='):
-                        slot_operator = '='
-                        slot = slot[:-1]
-                    slots = slot.split('/', 1)
+                    slot_operator = None
 
-                for chunk in slots:
-                    if not chunk:
+                slots = slot.split('/')
+                if len(slots) == 1:
+                    subslot = None
+                elif len(slots) == 2:
+                    slot = slots[0]
+                    subslot = slots[1]
+                    if slot == "":
                         raise errors.InvalidAtom(orig_atom, "empty slot targets aren't allowed")
+                    if subslot == "":
+                        raise errors.InvalidAtom(orig_atom, "empty subslot targets aren't allowed")
+                else:
+                    raise errors.InvalidAtom(orig_atom, f"redundant character in slot/subslot component: {slot!r}")
 
-                    if chunk[0] in '-.':
-                        raise errors.InvalidAtom(orig_atom, "slot targets must not start with a hypen or dot: {chunk!r}")
-                    elif not _valid_slot_chars.issuperset(chunk):
-                        invalid_chars = ', '.join(map(repr, sorted(set(chunk).difference(_valid_slot_chars))))
-                        raise errors.InvalidAtom(orig_atom, f"invalid character(s) in slot target: {invalid_chars}")
-
-                if len(slots) == 2:
-                    slot, subslot = slots
+                if slot is not None and not is_valid_slot(slot):
+                    raise errors.InvalidAtom(orig_atom, "invalid slot targets")
+                if subslot is not None and not is_valid_subslot(slot):
+                    raise errors.InvalidAtom(orig_atom, "invalid subslot targets")
 
             sf(self, "slot", slot)
             sf(self, "slot_operator", slot_operator)
@@ -163,7 +173,14 @@ class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
             sf(self, "slot", None)
             sf(self, "slot_operator", None)
             sf(self, "subslot", None)
-            sf(self, "repo_id", None)
+
+        # self.blocks and self.blocks_strongly
+        sf(self, "blocks", atom[0] == "!")
+        if self.blocks:
+            atom = atom[1:]
+            sf(self, "blocks_strongly", atom[0] == "!")
+            if self.blocks_strongly:
+                atom = atom[1:]
 
         # self.op
         if atom[0] in ('<', '>'):
@@ -174,37 +191,63 @@ class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
                 sf(self, 'op', atom[0])
                 atom = atom[1:]
         elif atom[0] == '=':
-            if atom[-1] == '*':
-                sf(self, 'op', '=*')                # FIXME, not in _valid_ops
-                atom = atom[1:-1]
-            else:
-                atom = atom[1:]
-                sf(self, 'op', '=')
+            atom = atom[1:]
+            sf(self, 'op', '=')
         elif atom[0] == '~':
             sf(self, 'op', '~')
             atom = atom[1:]
         else:
             sf(self, 'op', None)
 
-        if use_start != -1 and slot_start != -1 and use_start < slot_start:
-            raise errors.InvalidAtom(
-                orig_atom,
-                "slot restriction must proceed use")
-        try:
-            sf(self, "_cpv", cpv.CPV(self.cpvstr, versioned=bool(self.op)))
-        except errors.InvalidCPV as e:
-            raise errors.InvalidAtom(orig_atom) from e
+        # self.post_wildcard
+        if atom[-1] == '*':
+            sf(self, 'post_wildcard', True)
+            atom = atom[:-1]
 
+        # self.category, self.package, self.ver, self.rev
+        if True:
+            try:
+                category, pkg_name_ver = atom.rsplit("/", 1)
+            except ValueError:
+                raise errors.InvalidAtom(orig_atom, "no category component")     # occurs if the rsplit yields only one item
+            pkg_chunks = pkg_name_ver.split("-")
+            pkgname = pkg_chunks[0]
+            if len(pkg_chunks) == 1:
+                ver = None
+                rev = None
+            else:
+                if is_valid_package_revision(pkg_chunks[-1]):
+                    ver = "-".join(pkg_chunks[1:-1])
+                    rev = pkg_chunks[-1]
+                else:
+                    ver = pkg_chunks[1:]
+                    rev = None
+
+            if not is_valid_category(category):
+                raise errors.InvalidAtom(orig_atom, "invalid category component")
+            if not is_valid_package_name(pkgname):
+                raise errors.InvalidAtom(orig_atom, "invalid package component")
+            if not is_valid_package_version(ver):
+                raise errors.InvalidAtom(orig_atom, "invalid version component")
+            if rev is not None and not is_valid_package_revision(rev):
+                raise errors.InvalidAtom(orig_atom, "invalid revision component")
+
+            sf(self, 'category', category)
+            sf(self, 'package', pkgname)
+            sf(self, 'ver', ver)
+            sf(self, 'rev', rev)
+
+        # check for invalid combinations
         if self.op is not None:
             if self.ver is None:
-                raise errors.InvalidAtom(orig_atom, "operator requires a version")
+                raise errors.InvalidAtom(orig_atom, "'{self.op}' operator requires a version")
             if self.op == '~' and self.revision is not None:
-                raise errors.InvalidAtom(orig_atom, "~ revision operater cannot be combined with a revision")
+                raise errors.InvalidAtom(orig_atom, "'~' operator cannot be combined with a revision")
         else:
             if self.ver is not None:
                 raise errors.InvalidAtom(orig_atom, 'versioned atom requires an operator')
-        sf(self, "_hash", hash(orig_atom))
-        sf(self, "negate_vers", negate_vers)
+        if self.post_wildcard and self.op != "=":
+            raise errors.InvalidAtom(orig_atom, "'*' postfix requires '=' operator")
 
     def __repr__(self):
         if self.op == '=*':

@@ -21,12 +21,16 @@ def is_valid_package_version(s):
 
 def is_valid_package_revision(s):
     assert isinstance(s, str)
+    if len(s) == 0:
+        return False
+    if s[0] != 'r':
+        return False
     try:
-        if s[0] == 'r' and int(s[1:]) >= 1:
-            return True
+        if int(s[1:]) < 1:
+            return False
     except ValueError:
-        pass
-    return False
+        return False
+    return True
 
 
 class CP(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
@@ -128,10 +132,10 @@ class CPV(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
 
         if len(args) == 1:
             try:
-                category, pkg_ver = args[0].rsplit("/", 1)
+                category, pkg_name_ver = args[0].rsplit("/", 1)
             except ValueError:
                 raise TypeError("no category component")     # occurs if the rsplit yields only one item
-            pkg_chunks = pkg_ver.split("-")
+            pkg_chunks = pkg_name_ver.split("-")
             if len(pkg_chunks) < 2:
                 raise TypeError("missing package name, version, and/or revision")
             pkgname = pkg_chunks[0]
@@ -160,8 +164,7 @@ class CPV(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
             raise TypeError("invalid package component")
         if not is_valid_package_version(ver):
             raise TypeError("invalid version component")
-        if rev is not None:
-            if not is_valid_package_revision(rev):
+        if rev is not None and not is_valid_package_revision(rev):
                 raise TypeError("invalid revision component")
 
         sf = object.__setattr__
