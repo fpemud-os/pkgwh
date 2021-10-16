@@ -175,30 +175,74 @@ class MakeConfFile:
         return MakeConfFile.get_variable(buf, var_name)
 
 
-class KernelFile:
+class PackageAcceptKeywordsFile:
 
-    # data format: (kernel_type, kernel_name)
+    def __init__(self, filepath, open_mode="r"):
+        pass
 
-    @staticmethod
-    def parse(buf):
-        ret = None
-        for line in buf.split("\n"):
-            line = line.strip()
-            if line != "" and not line.startswith("#"):
-                tlist = line.split("/")
-                if len(tlist) != 2:
-                    raise ConfigError("invalid value of kernel atom name")
-                if ret is not None:
-                    raise ConfigError("redundant line(s)")
-                ret = (tlist[0], tlist[1])
-        if ret is None:
-            raise ConfigError("invalid content")
-        return ret
+    @property
+    def data(self):
+        # data format: [(pkg-atom, wildcard)]
+        pass
 
-    @staticmethod
-    def parse_from_file(filepath):
-        buf = pathlib.Path(filepath).read_text()
-        return KernelFile.parse(buf)
+    def append_pkg_atom(self, pkg_atom):
+        pass
+
+    def remove_pkg_atom(self, pkg_atom):
+        pass
+
+    def remove_all(self):
+        pass
+
+    def save(self):
+        pass
+
+
+class PackageMaskFile:
+
+    def __init__(self, filepath, open_mode="r"):
+        pass
+
+    @property
+    def data(self):
+        # data format: [pkg-atom]
+        pass
+
+    def append_pkg_atom(self, pkg_atom):
+        pass
+
+    def remove_pkg_atom(self, pkg_atom):
+        pass
+
+    def remove_all(self):
+        pass
+
+    def save(self):
+        pass
+
+
+
+class PackageUnMaskFile:
+
+    def __init__(self, filepath, open_mode="r"):
+        pass
+
+    @property
+    def data(self):
+        # data format: [pkg-atom]
+        pass
+
+    def append_pkg_atom(self, pkg_atom):
+        pass
+
+    def remove_pkg_atom(self, pkg_atom):
+        pass
+
+    def remove_all(self):
+        pass
+
+    def save(self):
+        pass
 
 
 class KernelAddonFile:
