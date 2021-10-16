@@ -1,29 +1,22 @@
-"""gentoo ebuild specific base package class"""
+#!/usr/bin/env python3
 
 import re
 from snakeoil import klass
 
 
-category_name_re = re.compile(r"^(?:[a-zA-Z0-9][-a-zA-Z0-9+._]*(?:/(?!$))?)+$")                       # FIXME: change to lazy+compile + weak-ref, snakeoil.demandload.demand_compile_regexp() doesn't have variable form
-
-package_name_re = re.compile(r"^[a-zA-Z0-9+_]+$")                                                     # FIXME: change to lazy+compile + weak-ref? test performance first
-
-package_version_re = re.compile(r"^(?:\d+)(?:\.\d+)*[a-zA-Z]?(?:_(p(?:re)?|beta|alpha|rc)\d*)*$")     # FIXME: change to lazy+compile + weak-ref? test performance first
-
-
 def is_valid_category(s):
     assert isinstance(s, str)
-    return category_name_re.fullmatch(s)
+    return _category_name_re.fullmatch(s)
 
 
 def is_valid_package_name(s):
     assert isinstance(s, str)
-    return package_name_re.fullmatch(s)
+    return _package_name_re.fullmatch(s)
 
 
 def is_valid_package_version(s):
     assert isinstance(s, str)
-    return True
+    return _package_version_re.fullmatch(s)
 
 
 def is_valid_package_revision(s):
@@ -34,11 +27,6 @@ def is_valid_package_revision(s):
     except ValueError:
         pass
     return False
-
-
-def is_valid_repository_name(s):
-    assert isinstance(s, str)
-    return True
 
 
 class CP(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
@@ -255,25 +243,6 @@ class CPV(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
             raise TypeError(f"'>=' not supported between instances of {self.__class__.__name__!r} and {other.__class__.__name__!r}")
 
 
-class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
-    """category/package-version or category/package-version-revision, which represents one version of a specific Gentoo package
-
-    :ivar prefix-op: str prefix operator, optional 
-    :ivar category: str category name
-    :ivar package: str package name
-    :ivar slot: str slot
-    :ivar subslot: str subslot
-    :ivar ver: str version
-    :ivar rev: str revision
-    :ivar fullver: str version-revision
-    :ivar key: str (category/package-version-revision)
-    """
-
-    def __init__(self, *args):
-        pass
-
-
-
 def package_fullver_cmp(ver1, rev1, ver2, rev2):
     def cmp(a, b):
         return a > b
@@ -395,6 +364,12 @@ def package_fullver_cmp(ver1, rev1, ver2, rev2):
     # The revision holds the final difference.
     return cmp(rev1, rev2)
 
+
+_category_name_re = re.compile(r"^(?:[a-zA-Z0-9][-a-zA-Z0-9+._]*(?:/(?!$))?)+$")                       # FIXME: change to lazy+compile + weak-ref, snakeoil.demandload.demand_compile_regexp() doesn't have variable form
+
+_package_name_re = re.compile(r"^[a-zA-Z0-9+_]+$")                                                     # FIXME: change to lazy+compile + weak-ref? test performance first
+
+_package_version_re = re.compile(r"^(?:\d+)(?:\.\d+)*[a-zA-Z]?(?:_(p(?:re)?|beta|alpha|rc)\d*)*$")     # FIXME: change to lazy+compile + weak-ref? test performance first
 
 _suffix_regexp = re.compile('^(alpha|beta|rc|pre|p)(\\d*)$')
 _suffix_value = {"pre": -2, "p": 1, "alpha": -4, "beta": -3, "rc": -1}

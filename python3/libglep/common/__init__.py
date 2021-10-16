@@ -21,12 +21,11 @@
 # THE SOFTWARE.
 
 """
-libglep
-
-@author: Fpemud
-@license: GPLv3 License
-@contact: fpemud@sina.com
+libglep.common
 """
 
-__author__ = "fpemud@sina.com (Fpemud)"
-__version__ = "0.0.1"
+from ._cpv import is_valid_category, is_valid_package_name, is_valid_package_version, is_valid_package_revision
+from ._cpv import CP, CPV
+
+from ._atom import is_valid_prefix_op, is_valid_repository, is_valid_slot, is_valid_use_flag
+from ._atom import  PkgAtom
