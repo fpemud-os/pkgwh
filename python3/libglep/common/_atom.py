@@ -29,11 +29,13 @@ def is_valid_use_flag(s):
 class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
     """Currently implements gentoo ebuild atom parsing.
 
-    :ivar op: str prefix operator, optional 
+    :ivar blocks: bool has ! operator
+    :ivar blocks_strongly: bool has !! operator
+    :ivar op: str prefix operator, optional
     :ivar category: str category name, may contain wildcard
     :ivar package: str package name, may contain wildcard
     :ivar slot: str slot, optional
-    :ivar slot_op: str slot operator, optional
+    :ivar slot_operator: str slot operator, optional
     :ivar subslot: str subslot, optional
     :ivar ver: str version, optional, may contain wildcard
     :ivar rev: str revision, optional, may contain wildcard
@@ -54,6 +56,15 @@ class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
 
         sf = object.__setattr__
         orig_atom = atom
+
+        # self.blocks and self.blocks_strongly
+        sf(self, "blocks", atom[0] == "!")
+        if self.blocks:
+            atom = atom[1:]
+            sf(self, "blocks_strongly", atom[0] == "!")
+            if self.blocks_strongly:
+                atom = atom[1:]
+
         use_start = atom.find("[")
         slot_start = atom.find(":")
 
@@ -145,28 +156,16 @@ class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
                     slot, subslot = slots
 
             sf(self, "slot", slot)
-            sf(self, "slot_op", slot_operator)
+            sf(self, "slot_operator", slot_operator)
             sf(self, "subslot", subslot)
             atom = atom[:slot_start]
         else:
             sf(self, "slot", None)
-            sf(self, "slot_op", None)
+            sf(self, "slot_operator", None)
             sf(self, "subslot", None)
             sf(self, "repo_id", None)
 
-        sf(self, "blocks", atom[0] == "!")
-        if self.blocks:
-            atom = atom[1:]
-            # hackish/slow, but lstrip doesn't take a 'prune this many' arg
-            # open to alternatives
-            if eapi not in ('0', '1') and atom.startswith("!"):
-                atom = atom[1:]
-                sf(self, "blocks_strongly", True)
-            else:
-                sf(self, "blocks_strongly", False)
-        else:
-            sf(self, "blocks_strongly", False)
-
+        # self.op
         if atom[0] in ('<', '>'):
             if atom[1] == '=':
                 sf(self, 'op', atom[:2])
@@ -176,7 +175,7 @@ class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
                 atom = atom[1:]
         elif atom[0] == '=':
             if atom[-1] == '*':
-                sf(self, 'op', '=*')
+                sf(self, 'op', '=*')                # FIXME, not in _valid_ops
                 atom = atom[1:-1]
             else:
                 atom = atom[1:]
@@ -185,52 +184,75 @@ class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
             sf(self, 'op', '~')
             atom = atom[1:]
         else:
-            sf(self, 'op', '')
-        sf(self, 'cpvstr', atom)
+            sf(self, 'op', None)
 
-        if eapi == '0':
-            for x in ('use', 'slot'):
-                if getattr(self, x) is not None:
-                    raise errors.MalformedAtom(
-                        orig_atom,
-                        f"{x} atoms aren't supported for EAPI 0")
-        elif eapi == '1':
-            if self.use is not None:
-                raise errors.MalformedAtom(
-                    orig_atom,
-                    "use atoms aren't supported for EAPI < 2")
-        if eapi != '-1':
-            if self.repo_id is not None:
-                raise errors.MalformedAtom(
-                    orig_atom,
-                    f"repo_id atoms aren't supported for EAPI {eapi}")
         if use_start != -1 and slot_start != -1 and use_start < slot_start:
-            raise errors.MalformedAtom(
+            raise errors.InvalidAtom(
                 orig_atom,
                 "slot restriction must proceed use")
         try:
             sf(self, "_cpv", cpv.CPV(self.cpvstr, versioned=bool(self.op)))
         except errors.InvalidCPV as e:
-            raise errors.MalformedAtom(orig_atom) from e
+            raise errors.InvalidAtom(orig_atom) from e
 
-        if self.op:
-            if self.version is None:
-                raise errors.MalformedAtom(
-                    orig_atom, "operator requires a version")
-            elif self.op == '~' and self.revision:
-                raise errors.MalformedAtom(
-                    orig_atom,
-                    "~ revision operater cannot be combined with a revision")
-        elif self.version is not None:
-            raise errors.MalformedAtom(
-                orig_atom, 'versioned atom requires an operator')
+        if self.op is not None:
+            if self.ver is None:
+                raise errors.InvalidAtom(orig_atom, "operator requires a version")
+            if self.op == '~' and self.revision is not None:
+                raise errors.InvalidAtom(orig_atom, "~ revision operater cannot be combined with a revision")
+        else:
+            if self.ver is not None:
+                raise errors.InvalidAtom(orig_atom, 'versioned atom requires an operator')
         sf(self, "_hash", hash(orig_atom))
         sf(self, "negate_vers", negate_vers)
 
-    __getattr__ = klass.GetAttrProxy("_cpv")
-    __dir__ = klass.DirProxy("_cpv")
+    def __repr__(self):
+        if self.op == '=*':
+            atom = f"={self.cpvstr}*"
+        else:
+            atom = self.op + self.cpvstr
+        if self.blocks:
+            atom = '!' + atom
+        if self.blocks:
+            if self.blocks_strongly:
+                atom = '!!' + atom
+            else:
+                atom = '!' + atom
+        attrs = [atom]
+        if self.use:
+            attrs.append(f'use={self.use!r}')
+        if self.slot is not None:
+            attrs.append(f'slot={self.slot!r}')
+        if self.subslot is not None:
+            attrs.append(f'subslot={self.subslot!r}')
+        if self.repo_id is not None:
+            attrs.append(f'repo_id={self.repo_id!r}')
+        return '<%s %s @#%x>' % (self.__class__.__name__, ' '.join(attrs), id(self))
 
-
+    def __str__(self):
+        if self.op == '=*':
+            s = f"={self.cpvstr}*"
+        else:
+            s = self.op + self.cpvstr
+        if self.blocks:
+            if self.blocks_strongly:
+                s = '!!' + s
+            else:
+                s = '!' + s
+        if self.slot:
+            s += f":{self.slot}"
+            if self.subslot:
+                s += f"/{self.subslot}"
+            if self.slot_operator == "=":
+                s += self.slot_operator
+        elif self.slot_operator:
+            s += f":{self.slot_operator}"
+        if self.repo_id:
+            s += f"::{self.repo_id}"
+        if self.use:
+            use = ','.join(self.use)
+            s += f"[{use}]"
+        return s
 
 
 
