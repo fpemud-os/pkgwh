@@ -241,9 +241,7 @@ def package_fullver_cmp(ver1, rev1, ver2, rev2):
 
     # If the versions are the same, comparing revisions will suffice.
     if ver1 == ver2:
-        rev1 = int(rev1[1:]) if rev1 is not None else 0
-        rev2 = int(rev2[1:]) if rev2 is not None else 0
-        return cmp(rev1, rev2)
+        return package_revision_cmp(rev1, rev2)
 
     # Split up the versions into dotted strings and lists of suffixes.
     parts1 = ver1.split("_")
@@ -354,6 +352,12 @@ def package_fullver_cmp(ver1, rev1, ver2, rev2):
 
     # Our versions had different strings but ended up being equal.
     # The revision holds the final difference.
+    return package_revision_cmp(rev1, rev2)
+
+
+def package_revision_cmp(rev1, rev2):
+    rev1 = int(rev1[1:]) if rev1 is not None else 0
+    rev2 = int(rev2[1:]) if rev2 is not None else 0
     return cmp(rev1, rev2)
 
 

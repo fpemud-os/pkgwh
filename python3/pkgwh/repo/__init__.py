@@ -1,6 +1,6 @@
 
 
-class UnconfiguredTree(prototype.tree):
+class RawTree(prototype.tree):
     """Raw implementation supporting standard ebuild tree.
 
     Return packages don't have USE configuration bound to them.
@@ -368,7 +368,7 @@ class UnconfiguredTree(prototype.tree):
     requires_config='config')
 def tree(config, repo_config, cache=(), eclass_cache=None,
          default_mirrors=None, allow_missing_manifests=False,
-         tree_cls=UnconfiguredTree):
+         tree_cls=RawTree):
     """Initialize an unconfigured ebuild repository."""
     repo_id = repo_config.repo_id
     repo_path = repo_config.location
