@@ -43,35 +43,38 @@ class CP(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
 
     __slots__ = ("category", "package")
 
-    def __init__(self, *args):
+    def __init__(self, *args, _do_check=True):
         """
         Can be called with one string or with two string args.
 
         If called with one arg that is the "category/package" string.
 
         If called with two args they are the category and package components respectively.
+
+        _do_check=False is for internal use only, to raise performance
         """
 
-        for x in args:
-            if not isinstance(x, str):
-                raise TypeError(f"all args must be strings, got {args!r}")
-
         if len(args) == 1:
+            assert _do_check
             try:
                 category, pkgname = args[0].rsplit("/", 1)
             except ValueError:
                 raise TypeError("no category component")     # occurs if the rsplit yields only one item
         elif len(args) == 2:
+            if _do_check:
+                if any([not isinstance(x, str) for x in args]):
+                    raise TypeError(f"all args must be strings, got {args!r}")
+
             category = args[0]
             pkgname = args[1]
+
+            if _do_check:
+                if not is_valid_category(category):
+                    raise TypeError("invalid category component")
+                if not is_valid_package_name(pkgname):
+                    raise TypeError("invalid package component")
         else:
             raise TypeError(f"CP takes category/package string or separate components as arguments: got {args!r}")
-
-        if not is_valid_category(category):
-            raise TypeError("invalid category component")
-
-        if not is_valid_package_name(pkgname):
-            raise TypeError("invalid package component")
 
         sf = object.__setattr__
         sf(self, 'category', category)
@@ -114,20 +117,19 @@ class CPV(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
 
     __slots__ = ("category", "package", "ver", "rev")
 
-    def __init__(self, *args):
+    def __init__(self, *args, _do_check=True):
         """
         Can be called with one string arg, three string args or four string args.
 
         If called with one arg that is the "category/package-version" or "category/package-version-revision" string.
 
         If called with three args they are the category, package and version components respectively. For four args, the revision components is the fourth arg.
+
+        _do_check=False is for internal use only, to raise performance
         """
 
-        for x in args:
-            if not isinstance(x, str):
-                raise TypeError(f"all args must be strings, got {args!r}")
-
         if len(args) == 1:
+            assert _do_check
             try:
                 category, pkg_name_ver = args[0].rsplit("/", 1)
             except ValueError:
@@ -142,27 +144,28 @@ class CPV(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
             else:
                 ver = pkg_chunks[1:]
                 rev = None
-        elif len(args) == 3:
+        elif len(args) == 3 or len(args) == 4:
+            if _do_check:
+                if any([not isinstance(x, str) for x in args]):
+                    raise TypeError(f"all args must be strings, got {args!r}")
+
             category = args[0]
             pkgname = args[1]
             ver = args[2]
-            rev = None
-        elif len(args) == 4:
-            category = args[0]
-            pkgname = args[1]
-            ver = args[2]
-            rev = args[3]
+            rev = args[3] if len(args) > 3 else None
+                
+            if _do_check:
+                if not is_valid_category(category):
+                    raise TypeError("invalid category component")
+                if not is_valid_package_name(pkgname):
+                    raise TypeError("invalid package component")
+                if not is_valid_package_version(ver):
+                    raise TypeError("invalid version component")
+                if rev is not None:
+                    if not is_valid_package_revision(rev):
+                        raise TypeError("invalid revision component")
         else:
             raise TypeError(f"CPV takes cpv string or separate components as arguments: got {args!r}")
-
-        if not is_valid_category(category):
-            raise TypeError("invalid category component")
-        if not is_valid_package_name(pkgname):
-            raise TypeError("invalid package component")
-        if not is_valid_package_version(ver):
-            raise TypeError("invalid version component")
-        if rev is not None and not is_valid_package_revision(rev):
-                raise TypeError("invalid revision component")
 
         sf = object.__setattr__
         sf(self, 'category', category)

@@ -7,3 +7,5 @@ from ._pkg_wildcard import PkgWildcard
 
 from ._pkg_atom import is_valid_prefix_op, is_valid_repository, is_valid_slot, is_valid_subslot, is_valid_use_flag
 from ._pkg_atom import PkgAtom
+
+from ._eapi import get_eapi
