@@ -8,7 +8,7 @@ from snakeoil.strings import pluralism
 from . import Manifests
 
 
-class LayoutConfFile(klass.ImmutableInstance):
+class LayoutConf(klass.ImmutableInstance):
 
     __slots__ = ("repo_name", "manifests", "masters", "aliases", "properties_allowed", "restrict_allowed", 
                  "eapis_banned", "eapis_deprecated", "sign_commits", "cache_format", "profile_formats", "_repo")

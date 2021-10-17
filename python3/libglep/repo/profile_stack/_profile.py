@@ -77,7 +77,7 @@ def _load_and_invoke(func, filename, read_func, fallback, allow_recurse, allow_l
 
 
 
-class ProfileNode(metaclass=klass.immutable_instance):
+class RawProfile(metaclass=klass.immutable_instance):
 
     _repo_map = None
 
@@ -466,7 +466,7 @@ class ProfileNode(metaclass=klass.immutable_instance):
         return profile
 
 
-class EmptyRootNode(ProfileNode):
+class EmptyRootNode(RawProfile):
 
     __inst_caching__ = True
 
@@ -480,7 +480,7 @@ class EmptyRootNode(ProfileNode):
 
 class ProfileStack:
 
-    _node_kls = ProfileNode
+    _node_kls = RawProfile
 
     def __init__(self, profile):
         self.profile = profile
