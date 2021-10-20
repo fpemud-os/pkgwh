@@ -392,3 +392,154 @@ class SystemMounts:
     def _parse(self):
         with open("/proc/mounts") as f:
             return [self.Entry(line) for line in f.readlines()]
+
+
+class ChunkedDataDict(metaclass=generic_equality):
+
+    __attr_comparison__ = ('_global_settings', '_dict')
+
+    def __init__(self):
+        self._global_settings = []
+        self._dict = defaultdict(partial(list, self._global_settings))
+
+    @property
+    def frozen(self):
+        return isinstance(self._dict, mappings.ImmutableDict)
+
+    def clone(self, unfreeze=False):
+        obj = self.__class__()
+        if self.frozen and not unfreeze:
+            obj._dict = self._dict
+            obj._global_settings = self._global_settings
+            return obj
+        obj._dict = defaultdict(partial(list, self._global_settings))
+        for key, values in self._dict.items():
+            obj._dict[key].extend(values)
+        obj._global_settings = list(self._global_settings)
+        return obj
+
+    def mk_item(self, key, neg, pos):
+        return chunked_data(key, tuple(neg), tuple(pos))
+
+    def add_global(self, item):
+        return self._add_global(item.neg, item.pos, restrict=item.key)
+
+    def add_bare_global(self, disabled, enabled):
+        return self._add_global(disabled, enabled)
+
+    def _add_global(self, disabled, enabled, restrict=None):
+        if not disabled and not enabled:
+            return
+        # discard current global in the mapping.
+        disabled = set(disabled)
+        enabled = set(enabled)
+        if restrict is None:
+            restrict = packages.AlwaysTrue
+        payload = self.mk_item(restrict, tuple(disabled), tuple(enabled))
+        for vals in self._dict.values():
+            vals.append(payload)
+
+        self._expand_globals([payload])
+
+    def merge(self, cdict):
+        if not isinstance(cdict, ChunkedDataDict):
+            raise TypeError(
+                "merge expects a ChunkedDataDict instance; "
+                f"got type {type(cdict)}, {cdict!r}")
+        if isinstance(cdict, PayloadDict) and not isinstance(self, PayloadDict):
+            raise TypeError(
+                "merge expects a PayloadDataDict instance; "
+                f"got type {type(cdict)}, {cdict!r}")
+        # straight extensions for this, rather than update_from_stream.
+        d = self._dict
+        for key, values in cdict._dict.items():
+            d[key].extend(values)
+
+        # note the cdict we're merging has the globals layer through it already, ours
+        # however needs to have the new globals appended to all untouched keys
+        # (no need to update the merged keys- they already have that global data
+        # interlaced)
+        new_globals = cdict._global_settings
+        if new_globals:
+            updates = set(d)
+            updates.difference_update(cdict._dict)
+            for key in updates:
+                d[key].extend(new_globals)
+            self._expand_globals(new_globals)
+
+    def _expand_globals(self, new_globals):
+        # while a chain seems obvious here, reversed is used w/in _build_cp_atom;
+        # reversed doesn't like chain, so we just modify the list and do it this way.
+        self._global_settings.extend(new_globals)
+        restrict = getattr(new_globals[0], 'key', packages.AlwaysTrue)
+        if restrict == packages.AlwaysTrue:
+            self._global_settings[:] = list(
+                _build_cp_atom_payload(self._global_settings, restrict))
+
+    def add(self, cinst):
+        self.update_from_stream([cinst])
+
+    def update_from_stream(self, stream):
+        for cinst in stream:
+            if getattr(cinst.key, 'key', None) is not None:
+                # atom, or something similar.  use the key lookup.
+                # hack also... recreate the restriction; this is due to
+                # internal idiocy in ChunkedDataDict that will be fixed.
+                new_globals = (x for x in self._global_settings
+                               if x not in self._dict[cinst.key.key])
+                self._dict[cinst.key.key].extend(new_globals)
+                self._dict[cinst.key.key].append(cinst)
+            else:
+                self.add_global(cinst)
+
+    def freeze(self):
+        if not isinstance(self._dict, mappings.ImmutableDict):
+            self._dict = mappings.ImmutableDict(
+                (k, tuple(v))
+                for k, v in self._dict.items())
+            self._global_settings = tuple(self._global_settings)
+
+    def optimize(self, cache=None):
+        if cache is None:
+            d_stream = (
+                (k, _build_cp_atom_payload(v, atom.atom(k), False))
+                for k, v in self._dict.items())
+            g_stream = (_build_cp_atom_payload(
+                self._global_settings,
+                packages.AlwaysTrue, payload_form=isinstance(self, PayloadDict)))
+        else:
+            d_stream = ((k, _cached_build_cp_atom_payload(
+                cache, v, atom.atom(k), False))
+                for k, v in self._dict.items())
+            g_stream = (_cached_build_cp_atom_payload(
+                cache, self._global_settings,
+                packages.AlwaysTrue, payload_form=isinstance(self, PayloadDict)))
+
+        if self.frozen:
+            self._dict = mappings.ImmutableDict(d_stream)
+            self._global_settings = tuple(g_stream)
+        else:
+            self._dict.update(d_stream)
+            self._global_settings[:] = list(g_stream)
+
+    def render_to_dict(self):
+        d = dict(self._dict)
+        if self._global_settings:
+            d[packages.AlwaysTrue] = self._global_settings[:]
+        return d
+
+    def __bool__(self):
+        return bool(self._global_settings) or bool(self._dict)
+
+    def __str__(self):
+        return str(self.render_to_dict())
+
+    def render_pkg(self, pkg, pre_defaults=()):
+        items = self._dict.get(pkg.key)
+        if items is None:
+            items = self._global_settings
+        s = set(pre_defaults)
+        incremental_chunked(s, (cinst for cinst in items if cinst.key.match(pkg)))
+        return s
+
+    pull_data = render_pkg

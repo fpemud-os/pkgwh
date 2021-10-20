@@ -31,6 +31,7 @@ def load_property(filename, *, read_func=_read_profile_files, fallback=(),
     :keyword allow_recurse: Controls whether or not this specific content can be a directory
         of files, rather than just a file.  Only is consulted if we're parsing the profile
         in non pms strict mode.
+    :keyword fallback: What to return if the file does not exist for this profile. Must be immutable.
     :keyword eapi_optional: If given, the EAPI for this profile node is checked to see if
         the given optional evaluates to True; if so, then parsing occurs.  If False, then
         the fallback is returned and no ondisk activity occurs.
@@ -66,7 +67,7 @@ def _load_and_invoke(func, filename, read_func, fallback, allow_recurse, allow_l
                 data = parse_func(read_func(files, allow_line_cont=allow_line_cont))
         else:
             data = fallback
-        return func(self, data)
+        return func(self)
     except (ValueError, IndexError, EnvironmentError) as e:
         raise ProfileError(profile_path, filename, e) from e
     except IsADirectoryError as e:
@@ -140,6 +141,7 @@ class RawProfile(metaclass=klass.immutable_instance):
             profile.append(neg_wildcard)
         return _Packages(tuple(system), tuple(profile))
 
+    @klass.jit_attr
     def parent_paths(self):
         data = self._read_profile_property_file("parents")
         if 'portage-2' in self._repo.profile_formats:
@@ -172,17 +174,200 @@ class RawProfile(metaclass=klass.immutable_instance):
             return tuple((abspath(pjoin(self.path, line)), line, lineno)
                         for line, lineno, relpath in data)
 
-    @load_property("package.provided", allow_recurse=True, eapi_optional='profile_pkg_provided')
-    def pkg_provided(self, data):
-        def _parse_cpv(s):
+    @klass.jit_attr
+    def pkg_provided(self):
+        for line, lineno, relpath in self._read_profile_property_file("package.provided", eapi_optional='profile_pkg_provided'):
             try:
-                return cpv.VersionedCPV(s)
-            except cpv.InvalidCPV:
-                logger.error(f'invalid package.provided entry: {s!r}')
-        data = (x[0] for x in data)
-        return split_negations(data, _parse_cpv)
+                yield CPV(line)
+            except errors.InvalidCPV:
+                raise ParseError(f'invalid package.provided entry: {line}')
 
-    def _parse_atom_negations(self, data):
+    @klass.jit_attr
+    def masks(self):
+        data = self._read_profile_property_file("package.mask")
+        return self._parse_atom_negations(data)
+
+    @klass.jit_attr
+    def unmasks(self):
+        data = self._read_profile_property_file("package.unmask")
+        return self._parse_atom_negations(data)
+
+    @klass.jit_attr
+    def pkg_deprecated(self):
+        data = self._read_profile_property_file("package.deprecated")
+        return self._parse_atom_negations(data)
+
+    @klass.jit_attr
+    def keywords(self):
+        data = self._read_profile_property_file("package.keywords")
+        return self._parse_atom_negations(data)
+
+    @klass.jit_attr
+    def accept_keywords(self):
+        data = self._read_profile_property_file("package.accept_keywords")
+        return self._parse_atom_negations(data)
+
+    @klass.jit_attr
+    def pkg_use(self):
+        data = self._read_profile_property_file("package.use")
+        c = ChunkedDataDict()
+        c.update_from_stream(chain.from_iterable(self._parse_package_use(data).values()))
+        c.freeze()
+        return c
+
+    @klass.jit_attr
+    def deprecated(self):
+        data = self._read_profile_property_file("deprecated", fallback=None)
+        if data is not None:
+            data = iter(readlines_utf8(data[0]))
+            try:
+                replacement = next(data).strip()
+                msg = "\n".join(x.lstrip("#").strip() for x in data)
+                data = (replacement, msg)
+            except StopIteration:
+                # only an empty replacement could trigger this; thus
+                # formatted badly.
+                logger.error(
+                    f"deprecated profile missing replacement: '{self.name}/deprecated'")
+                data = None
+        return data
+
+    @klass.jit_attr
+    def use_force(self):
+        data = self._read_profile_property_file("use.force")
+        return self._parse_use(data)
+
+    @klass.jit_attr
+    def use_stable_force(self):
+        data = self._read_profile_property_file("use.stable.force", eapi_optional='profile_stable_use')
+        return self._parse_use(data)
+
+    @klass.jit_attr
+    def pkg_use_force(self):
+        data = self._read_profile_property_file("package.use.force")
+        return self._parse_package_use(data)
+
+    @klass.jit_attr
+    def pkg_use_stable_force(self):
+        data = self._read_profile_property_file("package.use.stable.force", eapi_optional='profile_stable_use')
+        return self._parse_package_use(data)
+
+    @klass.jit_attr
+    def use_mask(self):
+        data = self._read_profile_property_file("use.mask")
+        return self._parse_use(data)
+
+    @klass.jit_attr
+    def use_stable_mask(self):
+        data = self._read_profile_property_file("use.stable.mask", eapi_optional='profile_stable_use')
+        return self._parse_use(data)
+
+    @klass.jit_attr
+    def pkg_use_mask(self):
+        data = self._read_profile_property_file("package.use.mask")
+        return self._parse_package_use(data)
+
+    @klass.jit_attr
+    def pkg_use_stable_mask(self):
+        data = self._read_profile_property_file("package.use.stable.mask", eapi_optional='profile_stable_use')
+        return self._parse_package_use(data)
+
+    @klass.jit_attr
+    def masked_use(self):
+        c = self.use_mask
+        if self.pkg_use_mask:
+            c = c.clone(unfreeze=True)
+            c.update_from_stream(chain.from_iterable(self.pkg_use_mask.values()))
+            c.freeze()
+        return c
+
+    @klass.jit_attr
+    def stable_masked_use(self):
+        c = self.use_mask.clone(unfreeze=True)
+        if self.use_stable_mask:
+            c.merge(self.use_stable_mask)
+        if self.pkg_use_mask:
+            c.update_from_stream(chain.from_iterable(self.pkg_use_mask.values()))
+        if self.pkg_use_stable_mask:
+            c.update_from_stream(chain.from_iterable(self.pkg_use_stable_mask.values()))
+        c.freeze()
+        return c
+
+    @klass.jit_attr
+    def forced_use(self):
+        c = self.use_force
+        if self.pkg_use_force:
+            c = c.clone(unfreeze=True)
+            c.update_from_stream(chain.from_iterable(self.pkg_use_force.values()))
+            c.freeze()
+        return c
+
+    @klass.jit_attr
+    def stable_forced_use(self):
+        c = self.use_force.clone(unfreeze=True)
+        if self.use_stable_force:
+            c.merge(self.use_stable_force)
+        if self.pkg_use_force:
+            c.update_from_stream(chain.from_iterable(self.pkg_use_force.values()))
+        if self.pkg_use_stable_force:
+            c.update_from_stream(chain.from_iterable(self.pkg_use_stable_force.values()))
+        c.freeze()
+        return c
+
+    @klass.jit_attr
+    def make_defaults(self):
+        data = self._read_profile_property_file("make.defaults", fallback=None)
+        d = {}
+        if data is not None:
+            d.update(read_bash_dict(data[0]))
+        return ImmutableDict(d)
+
+    @klass.jit_attr
+    def default_env(self):
+        data = self._read_profile_property_file("make.defaults", fallback=None)
+        rendered = _make_incrementals_dict()
+        for parent in self.parents:
+            rendered.update(parent.default_env.items())
+
+        if data is not None:
+            data = read_bash_dict(data[0], vars_dict=rendered)
+            rendered.update(data.items())
+        return ImmutableDict(rendered)
+
+    @klass.jit_attr
+    def bashrc(self):
+        path = pjoin(self.path, "profile.bashrc")
+        if os.path.exists(path):
+            return local_source(path)
+        return None
+
+    @klass.jit_attr
+    def eapi(self):
+        fullfn = os.path.join(self.path, "eapi")
+        if not os.path.exists(fullfn):
+            return "0"
+        return pathlib.Path(fullfn).read_text().rstrip("\n")
+
+    def _read_profile_property_file(self, filename, eapi_optional=None, fallback=()):
+        """
+        :filename: str property file name
+        :keyword fallback: What to return if the file does not exist for this profile. Must be immutable.
+        :keyword eapi_optional: If given, the EAPI for this profile node is checked to see if
+            the given optional evaluates to True; if so, then parsing occurs.  If False, then
+            the fallback is returned and no ondisk activity occurs.
+        """
+        if eapi_optional is not None and not getattr(self.eapi.options, eapi_optional, None):
+            data = fallback
+        else:
+            path = os.path.join(self.path, filename)
+            if not os.path.exists(path):
+                data = fallback
+            else:
+                data = iter_read_bash(path, enum_line=True)
+        for lineno, line in data:
+            yield line, lineno, filename
+
+    def _parse_atom_negations(self):
         """Parse files containing optionally negated package atoms."""
         neg, pos = [], []
         for line, lineno, relpath in data:
@@ -209,51 +394,7 @@ class RawProfile(metaclass=klass.immutable_instance):
             except ebuild_errors.MalformedAtom as e:
                 logger.error(f'{relpath!r}, line {lineno}: parsing error: {e}')
 
-    @load_property("package.mask", allow_recurse=True)
-    def masks(self, data):
-        return self._parse_atom_negations(data)
-
-    @load_property("package.unmask", allow_recurse=True)
-    def unmasks(self, data):
-        return self._parse_atom_negations(data)
-
-    @load_property("package.deprecated", allow_recurse=True)
-    def pkg_deprecated(self, data):
-        return self._parse_atom_negations(data)
-
-    @load_property("package.keywords", allow_recurse=True)
-    def keywords(self, data):
-        return tuple(self._package_keywords_splitter(data))
-
-    @load_property("package.accept_keywords", allow_recurse=True)
-    def accept_keywords(self, data):
-        return tuple(self._package_keywords_splitter(data))
-
-    @load_property("package.use", allow_recurse=True)
-    def pkg_use(self, data):
-        c = misc.ChunkedDataDict()
-        c.update_from_stream(
-            chain.from_iterable(self._parse_package_use(data).values()))
-        c.freeze()
-        return c
-
-    @load_property("deprecated", read_func=None, fallback=None)
-    def deprecated(self, data):
-        if data is not None:
-            data = iter(readlines_utf8(data[0]))
-            try:
-                replacement = next(data).strip()
-                msg = "\n".join(x.lstrip("#").strip() for x in data)
-                data = (replacement, msg)
-            except StopIteration:
-                # only an empty replacement could trigger this; thus
-                # formatted badly.
-                logger.error(
-                    f"deprecated profile missing replacement: '{self.name}/deprecated'")
-                data = None
-        return data
-
-    def _parse_package_use(self, data):
+    def _parse_package_use(self):
         d = defaultdict(list)
         # split the data down ordered cat/pkg lines
         for line, lineno, relpath in data:
@@ -271,7 +412,7 @@ class RawProfile(metaclass=klass.immutable_instance):
         return ImmutableDict((k, misc._build_cp_atom_payload(v, atom(k)))
                              for k, v in d.items())
 
-    def _parse_use(self, data):
+    def _parse_use(self):
         c = misc.ChunkedDataDict()
         data = (x[0] for x in data)
         neg, pos = split_negations(data)
@@ -279,181 +420,6 @@ class RawProfile(metaclass=klass.immutable_instance):
             c.add_bare_global(neg, pos)
         c.freeze()
         return c
-
-    @load_property("use.force", allow_recurse=True)
-    def use_force(self, data):
-        return self._parse_use(data)
-
-    @load_property("use.stable.force", allow_recurse=True,
-                   eapi_optional='profile_stable_use')
-    def use_stable_force(self, data):
-        return self._parse_use(data)
-
-    @load_property("package.use.force", allow_recurse=True)
-    def pkg_use_force(self, data):
-        return self._parse_package_use(data)
-
-    @load_property("package.use.stable.force", allow_recurse=True,
-                   eapi_optional='profile_stable_use')
-    def pkg_use_stable_force(self, data):
-        return self._parse_package_use(data)
-
-    @load_property("use.mask", allow_recurse=True)
-    def use_mask(self, data):
-        return self._parse_use(data)
-
-    @load_property("use.stable.mask", allow_recurse=True,
-                   eapi_optional='profile_stable_use')
-    def use_stable_mask(self, data):
-        return self._parse_use(data)
-
-    @load_property("package.use.mask", allow_recurse=True)
-    def pkg_use_mask(self, data):
-        return self._parse_package_use(data)
-
-    @load_property("package.use.stable.mask", allow_recurse=True,
-                   eapi_optional='profile_stable_use')
-    def pkg_use_stable_mask(self, data):
-        return self._parse_package_use(data)
-
-    @klass.jit_attr
-    def masked_use(self):
-        c = self.use_mask
-        if self.pkg_use_mask:
-            c = c.clone(unfreeze=True)
-            c.update_from_stream(
-                chain.from_iterable(self.pkg_use_mask.values()))
-            c.freeze()
-        return c
-
-    @klass.jit_attr
-    def stable_masked_use(self):
-        c = self.use_mask.clone(unfreeze=True)
-        if self.use_stable_mask:
-            c.merge(self.use_stable_mask)
-        if self.pkg_use_mask:
-            c.update_from_stream(
-                chain.from_iterable(self.pkg_use_mask.values()))
-        if self.pkg_use_stable_mask:
-            c.update_from_stream(
-                chain.from_iterable(self.pkg_use_stable_mask.values()))
-        c.freeze()
-        return c
-
-    @klass.jit_attr
-    def forced_use(self):
-        c = self.use_force
-        if self.pkg_use_force:
-            c = c.clone(unfreeze=True)
-            c.update_from_stream(
-                chain.from_iterable(self.pkg_use_force.values()))
-            c.freeze()
-        return c
-
-    @klass.jit_attr
-    def stable_forced_use(self):
-        c = self.use_force.clone(unfreeze=True)
-        if self.use_stable_force:
-            c.merge(self.use_stable_force)
-        if self.pkg_use_force:
-            c.update_from_stream(
-                chain.from_iterable(self.pkg_use_force.values()))
-        if self.pkg_use_stable_force:
-            c.update_from_stream(
-                chain.from_iterable(self.pkg_use_stable_force.values()))
-        c.freeze()
-        return c
-
-    @load_property('make.defaults', read_func=None, fallback=None)
-    def make_defaults(self, data):
-        d = {}
-        if data is not None:
-            d.update(read_bash_dict(data[0]))
-        return ImmutableDict(d)
-
-    @load_property('make.defaults', read_func=None, fallback=None)
-    def default_env(self, data):
-        rendered = _make_incrementals_dict()
-        for parent in self.parents:
-            rendered.update(parent.default_env.items())
-
-        if data is not None:
-            data = read_bash_dict(data[0], vars_dict=rendered)
-            rendered.update(data.items())
-        return ImmutableDict(rendered)
-
-    @klass.jit_attr
-    def bashrc(self):
-        path = pjoin(self.path, "profile.bashrc")
-        if os.path.exists(path):
-            return local_source(path)
-        return None
-
-    @load_property('eapi', fallback='0')
-    def eapi(self, data):
-        # handle fallback
-        if isinstance(data, str):
-            return get_eapi(data)
-
-        try:
-            line, lineno, relpath = next(data)
-        except StopIteration:
-            relpath = pjoin(self.name, 'eapi')
-            logger.error(f'{relpath!r}: empty file')
-            return get_eapi('0')
-
-        try:
-            next(data)
-            logger.error(f'{relpath!r}: multiple lines detected')
-        except StopIteration:
-            pass
-
-        eapi_str = line.strip()
-        if eapi_str not in EAPI.known_eapis:
-            logger.error(f'{relpath!r}: unknown EAPI {eapi_str!r}')
-        return get_eapi(eapi_str)
-
-    eapi_atom = klass.alias_attr("eapi.atom_kls")
-
-    @klass.jit_attr
-    def repoconfig(self):
-        return self._load_repoconfig_from_path(self.path)
-
-    @staticmethod
-    def _load_repoconfig_from_path(path):
-        path = abspath(path)
-        # strip '/' so we don't get '/usr/portage' == ('', 'usr', 'portage')
-        chunks = path.lstrip('/').split('/')
-        try:
-            pindex = max(idx for idx, x in enumerate(chunks) if x == 'profiles')
-        except ValueError:
-            # not in a repo...
-            return None
-        repo_path = pjoin('/', *chunks[:pindex])
-        return repo_objs.RepoConfig(repo_path)
-
-    @classmethod
-    def _autodetect_and_create(cls, path):
-        repo_config = cls._load_repoconfig_from_path(path)
-
-        # note while this else seems pointless, we do it this
-        # way so that we're not passing an arg unless needed- instance
-        # caching is a bit overprotective, even if pms_strict defaults to True,
-        # cls(path) is not cls(path, pms_strict=True)
-
-        if repo_config is not None and 'pms' not in repo_config.profile_formats:
-            profile = cls(path, pms_strict=False)
-        else:
-            profile = cls(path)
-
-        # optimization to avoid re-parsing what we already did.
-        object.__setattr__(profile, '_repoconfig', repo_config)
-        return profile
-
-    def _read_profile_property_file(self, filename):
-        path = os.path.join(self.path, filename)
-        for lineno, line in iter_read_bash(path, enum_line=True):
-            yield line, lineno, filename
 
 
 class EmptyRootNode(RawProfile):
