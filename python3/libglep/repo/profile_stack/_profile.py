@@ -1,5 +1,6 @@
 import os
 from snakeoil import klass
+from snakeoil.bash import iter_read_bash
 
 
 
@@ -77,6 +78,9 @@ def _load_and_invoke(func, filename, read_func, fallback, allow_recurse, allow_l
 
 
 
+
+
+
 class RawProfile(metaclass=klass.immutable_instance):
 
     _repo_map = None
@@ -103,14 +107,13 @@ class RawProfile(metaclass=klass.immutable_instance):
     def name(self):
         return self._name
 
-    @load_property("packages")
-    def packages(self, data):
-        repo_config = self.repoconfig
+    @klass.jit_attr
+    def packages(self):
         # TODO: get profile-set support into PMS
-        profile_set = repo_config is not None and 'profile-set' in repo_config.profile_formats
+        profile_set = 'profile-set' in self._repo.profile_formats
         sys, neg_sys, pro, neg_pro = [], [], [], []
         neg_wildcard = False
-        for line, lineno, relpath in data:
+        for line, lineno, relpath in self._read_profile_property_file("packages"):
             try:
                 if line[0] == '-':
                     if line == '-*':
@@ -137,10 +140,9 @@ class RawProfile(metaclass=klass.immutable_instance):
             profile.append(neg_wildcard)
         return _Packages(tuple(system), tuple(profile))
 
-    @load_property("parent")
-    def parent_paths(self, data):
-        repo_config = self.repoconfig
-        if repo_config is not None and 'portage-2' in repo_config.profile_formats:
+    def parent_paths(self):
+        data = self._read_profile_property_file("parents")
+        if 'portage-2' in self._repo.profile_formats:
             l = []
             for line, lineno, relpath in data:
                 repo_id, separator, profile_path = line.partition(':')
@@ -166,24 +168,9 @@ class RawProfile(metaclass=klass.immutable_instance):
                 else:
                     l.append((abspath(pjoin(self.path, repo_id)), line, lineno))
             return tuple(l)
-        return tuple((abspath(pjoin(self.path, line)), line, lineno)
-                     for line, lineno, relpath in data)
-
-    @klass.jit_attr
-    def parents(self):
-        kls = getattr(self, 'parent_node_kls', self.__class__)
-        parents = []
-        for path, line, lineno in self.parent_paths:
-            try:
-                parents.append(kls(path))
-            except ProfileError as e:
-                repo_id = self.repoconfig.repo_id
-                logger.error(
-                    f"repo {repo_id!r}: '{self.name}/parent' (line {lineno}), "
-                    f'bad profile parent {line!r}: {e.error}'
-                )
-                continue
-        return tuple(parents)
+        else:
+            return tuple((abspath(pjoin(self.path, line)), line, lineno)
+                        for line, lineno, relpath in data)
 
     @load_property("package.provided", allow_recurse=True, eapi_optional='profile_pkg_provided')
     def pkg_provided(self, data):
@@ -462,6 +449,11 @@ class RawProfile(metaclass=klass.immutable_instance):
         # optimization to avoid re-parsing what we already did.
         object.__setattr__(profile, '_repoconfig', repo_config)
         return profile
+
+    def _read_profile_property_file(self, filename):
+        path = os.path.join(self.path, filename)
+        for lineno, line in iter_read_bash(path, enum_line=True):
+            yield line, lineno, filename
 
 
 class EmptyRootNode(RawProfile):
