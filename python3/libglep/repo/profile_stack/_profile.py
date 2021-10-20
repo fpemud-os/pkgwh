@@ -81,29 +81,27 @@ class RawProfile(metaclass=klass.immutable_instance):
 
     _repo_map = None
 
-    def __init__(self, path, pms_strict=True):
-        self.path = path
-        if not os.path.isdir(self.path):
-            raise ProfileNotExistError(self.path)
+    def __init__(self, repo, path, pms_strict=True):
+        self._repo = repo
+        self._name = path
+        self.path = os.path.join(self._repo.location, "profiles", self._name)
         self.pms_strict = pms_strict
 
+        if not os.path.isdir(self.path):
+            raise ProfileNotExistError(self.path)
+
     def __str__(self):
-        return f"profile at {self.path}"
+        return f"profile {self._name} for repo {self._repo}"
 
     def __repr__(self):
-        return '<%s path=%r, @%#8x>' % (self.__class__.__name__, self.path, id(self))
+        return '<%s repo=%r, name=%r, @%#8x>' % (self.__class__.__name__, self._repo, self._name, id(self))
 
     system = klass.alias_attr("packages.system")
     profile_set = klass.alias_attr("packages.profile")
 
     @klass.jit_attr
     def name(self):
-        """Relative path to the profile from the profiles directory."""
-        try:
-            return self.path.split('/profiles/')[1]
-        except IndexError:
-            # profiles base path
-            return ''
+        return self._name
 
     @load_property("packages")
     def packages(self, data):
