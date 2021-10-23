@@ -440,7 +440,7 @@ class ProfileStack:
             for cpv in p.pkg_provided:
                 yield cpv
 
-o    @klass.jit_attr
+    @klass.jit_attr
     def masks(self):
         data = self._read_profile_property_file("package.mask")
         return self._parse_atom_negations(data)
