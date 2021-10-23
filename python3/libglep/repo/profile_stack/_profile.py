@@ -1,6 +1,6 @@
 import os
 from snakeoil import klass
-from snakeoil.bash import iter_read_bash
+from snakeoil.bash import iter_read_bash, read_bash_dict
 
 
 
@@ -214,20 +214,19 @@ class Profile(metaclass=klass.immutable_instance):
 
     @klass.jit_attr
     def deprecated(self):
-        data = self._read_profile_property_file("deprecated", fallback=None)
-        if data is not None:
-            data = iter(readlines_utf8(data[0]))
-            try:
-                replacement = next(data).strip()
-                msg = "\n".join(x.lstrip("#").strip() for x in data)
-                data = (replacement, msg)
-            except StopIteration:
-                # only an empty replacement could trigger this; thus
-                # formatted badly.
-                logger.error(
-                    f"deprecated profile missing replacement: '{self.name}/deprecated'")
-                data = None
-        return data
+        path = os.path.join(self.path, "deprecated")
+        try:
+            data = pathlib.Path(path).read_text()
+            i = data.find("\n")
+            if i < 0:
+                raise ParseError(f"deprecated profile missing replacement: '{self.name}/deprecated'")
+            if len(data) > i + 1 and data[i+1] != "\n":
+                raise ParseError(f"deprecated profile missing message: '{self.name}/deprecated'")
+            replacement = data[:i]          # replacement is in the line 1
+            msg = data[i+2:]                # line 2 is empty, line 3 and the following is the message
+            return (replacement, msg)
+        except FileNotFoundError:
+            return None
 
     @klass.jit_attr
     def use_force(self):
@@ -427,18 +426,16 @@ class ProfileStack:
         self._add_profile_and_its_ancestors(name)
 
     def name(self):
-        return self._profile[0]._name
+        return self._profile[-1]._name
 
     def packages(self):
-        return self._profiles[0].packages
+        return self._profiles[-1].packages
 
     @klass.jit_attr
     def pkg_provided(self):
-        for line, lineno, relpath in self._read_profile_property_files("package.provided", eapi_optional='profile_pkg_provided'):
-            try:
-                yield CPV(line)
-            except errors.InvalidCPV:
-                raise ParseError(f'invalid package.provided entry: {line}')
+        for p in self._profiles:
+            for cpv in p.pkg_provided:
+                yield cpv
 
     @klass.jit_attr
     def masks(self):
@@ -475,20 +472,13 @@ class ProfileStack:
 
     @klass.jit_attr
     def deprecated(self):
-        data = self._read_profile_property_file("deprecated", fallback=None)
-        if data is not None:
-            data = iter(readlines_utf8(data[0]))
-            try:
-                replacement = next(data).strip()
-                msg = "\n".join(x.lstrip("#").strip() for x in data)
-                data = (replacement, msg)
-            except StopIteration:
-                # only an empty replacement could trigger this; thus
-                # formatted badly.
-                logger.error(
-                    f"deprecated profile missing replacement: '{self.name}/deprecated'")
-                data = None
-        return data
+        if self._profiles[-1].deprecated:
+            return True
+        else:
+            for p in self._profiles[:-1]:
+                if p.deprecated:
+                    raise ParseError(f"parent profile {p.name} of profile {self.name} is deprecated")
+            return False
 
     @klass.jit_attr
     def use_force(self):
