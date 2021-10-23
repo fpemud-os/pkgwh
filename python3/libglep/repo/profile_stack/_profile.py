@@ -422,14 +422,17 @@ class ProfileStack:
 
     def __init__(self, repo, name):
         self._repo = repo
+
+        # current profile is the first element in self._profiles
         self._profiles = []
         self._add_profile_and_its_ancestors(name)
+        self._profiles.reverse()
 
     def name(self):
-        return self._profile[-1]._name
+        return self._profile[0]._name
 
     def packages(self):
-        return self._profiles[-1].packages
+        return self._profiles[0].packages
 
     @klass.jit_attr
     def pkg_provided(self):
@@ -437,7 +440,7 @@ class ProfileStack:
             for cpv in p.pkg_provided:
                 yield cpv
 
-    @klass.jit_attr
+o    @klass.jit_attr
     def masks(self):
         data = self._read_profile_property_file("package.mask")
         return self._parse_atom_negations(data)
@@ -472,10 +475,10 @@ class ProfileStack:
 
     @klass.jit_attr
     def deprecated(self):
-        if self._profiles[-1].deprecated:
+        if self._profiles[0].deprecated:
             return True
         else:
-            for p in self._profiles[:-1]:
+            for p in self._profiles[1:]:
                 if p.deprecated:
                     raise ParseError(f"parent profile {p.name} of profile {self.name} is deprecated")
             return False
