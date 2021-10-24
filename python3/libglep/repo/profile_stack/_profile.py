@@ -1,99 +1,19 @@
 import os
 from snakeoil import klass
+from snakeoil.osutils import pjoin
 from snakeoil.bash import iter_read_bash, read_bash_dict
-
-
-
-def _read_profile_files(files, allow_line_cont=False):
-    """Read all the given data files."""
-    for path in files:
-        # determine file path relative to the profiles dir
-        try:
-            relpath = path.split('/profiles/')[1]
-        except IndexError:
-            # profiles base path
-            relpath = os.path.basename(path)
-
-        for lineno, line in iter_read_bash(path, allow_line_cont=allow_line_cont, enum_line=True):
-            yield line, lineno, relpath
-
-
-def load_property(filename, *, read_func=_read_profile_files, fallback=(),
-                  parse_func=lambda x: x, allow_line_cont=False, allow_recurse=False,
-                  eapi_optional=None):
-    """Decorator simplifying parsing profile files to generate a profile property.
-
-    :param filename: The filename to parse within that profile directory.
-    :keyword read_func: An invokable used to read the specified file.
-    :keyword fallback: What to return if the file does not exist for this profile. Must be immutable.
-    :keyword parse_func: An invokable used to parse the data.
-    :keyword allow_line_cont: Controls whether line continuations are respected.
-    :keyword allow_recurse: Controls whether or not this specific content can be a directory
-        of files, rather than just a file.  Only is consulted if we're parsing the profile
-        in non pms strict mode.
-    :keyword fallback: What to return if the file does not exist for this profile. Must be immutable.
-    :keyword eapi_optional: If given, the EAPI for this profile node is checked to see if
-        the given optional evaluates to True; if so, then parsing occurs.  If False, then
-        the fallback is returned and no ondisk activity occurs.
-    :return: A :py:`klass.jit.attr_named` property instance.
-    """
-    def f(func):
-        f2 = klass.jit_attr_named(f'_{func.__name__}')
-        return f2(partial(_load_and_invoke, func, filename, read_func, fallback, allow_recurse, allow_line_cont, parse_func, eapi_optional))
-    return f
-
-
-def _load_and_invoke(func, filename, read_func, fallback, allow_recurse, allow_line_cont, parse_func, eapi_optional, self):
-    if eapi_optional is not None and not getattr(self.eapi.options, eapi_optional, None):
-        return func(self, fallback)
-
-    profile_path = self.path.rstrip('/')
-    base = pjoin(profile_path, filename)
-
-    files = []
-    if self.pms_strict or not allow_recurse:
-        if os.path.exists(base):
-            files.append(base)
-    else:
-        # Skip hidden files and backup files, those beginning with '.' or
-        # ending with '~', respectively.
-        files.extend(sorted_scan(base, hidden=False, backup=False))
-
-    try:
-        if files:
-            if read_func is None:
-                data = parse_func(files)
-            else:
-                data = parse_func(read_func(files, allow_line_cont=allow_line_cont))
-        else:
-            data = fallback
-        return func(self)
-    except (ValueError, IndexError, EnvironmentError) as e:
-        raise ProfileError(profile_path, filename, e) from e
-    except IsADirectoryError as e:
-        raise ProfileError(
-            self.path, filename,
-            "path is a directory, but this profile is PMS format- "
-            "directories aren't allowed. See layout.conf profile-formats "
-            "to enable directory support") from e
-
-
-
-
+from ...errors import ProfileNotExistError
 
 
 class Profile(metaclass=klass.immutable_instance):
 
-    _repo_map = None
-
-    def __init__(self, repo, path, pms_strict=True):
+    def __init__(self, repo, name, pms_strict=True):
         self._repo = repo
-        self._name = path
-        self.path = os.path.join(self._repo.location, "profiles", self._name)
-        self.pms_strict = pms_strict
+        self._name = name
+        self._pms_strict = pms_strict
 
-        if not os.path.isdir(self.path):
-            raise ProfileNotExistError(self.path)
+        if not os.path.isdir(self._profile_path()):
+            raise ProfileNotExistError(self._profile_path())
 
     def __str__(self):
         return f"profile {self._name} for repo {self._repo}"
@@ -101,7 +21,6 @@ class Profile(metaclass=klass.immutable_instance):
     def __repr__(self):
         return '<%s repo=%r, name=%r, @%#8x>' % (self.__class__.__name__, self._repo, self._name, id(self))
 
-    @klass.jit_attr
     def name(self):
         return self._name
 
@@ -109,9 +28,10 @@ class Profile(metaclass=klass.immutable_instance):
     def packages(self):
         # TODO: get profile-set support into PMS
         profile_set = 'profile-set' in self._repo.profile_formats
+        relpath = self._property_file_path("packages")
         sys, neg_sys, pro, neg_pro = [], [], [], []
         neg_wildcard = False
-        for line, lineno, relpath in self._read_profile_property_file("packages"):
+        for line, lineno in self._read_profile_property_file(relpath):
             try:
                 if line[0] == '-':
                     if line == '-*':
@@ -344,6 +264,12 @@ class Profile(metaclass=klass.immutable_instance):
             return "0"
         return pathlib.Path(fullfn).read_text().rstrip("\n")
 
+    def _profile_path(self):
+        return pjoin(self._repo.location, "profiles", self._name)
+
+    def _property_file_path(self, filename):
+        return pjoin(self._profile_path(), filename)
+
     def _read_profile_property_file(self, filename, eapi_optional=None, fallback=()):
         """
         :filename: str property file name
@@ -355,13 +281,12 @@ class Profile(metaclass=klass.immutable_instance):
         if eapi_optional is not None and not getattr(self.eapi.options, eapi_optional, None):
             data = fallback
         else:
-            path = os.path.join(self.path, filename)
-            if not os.path.exists(path):
+            if not os.path.exists(filename):
                 data = fallback
             else:
-                data = iter_read_bash(path, enum_line=True)
+                data = iter_read_bash(filename, enum_line=True)
         for lineno, line in data:
-            yield line, lineno, filename
+            yield line, lineno
 
     def _parse_atom_negations(self):
         """Parse files containing optionally negated package atoms."""

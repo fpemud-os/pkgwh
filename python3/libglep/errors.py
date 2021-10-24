@@ -86,7 +86,7 @@ class ProfileNotExistError(ProfileError):
 
 
 class ProfileParseError(ProfileError):
-    """Profile parse failed."""
+    """Profile property file parse failed."""
 
     def __init__(self, dirpath, filename, error):
         self.dirpath, self.filename, self.error = dirpath, filename, error
