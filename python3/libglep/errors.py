@@ -88,8 +88,19 @@ class ProfileNotExistError(ProfileError):
 class ProfileParseError(ProfileError):
     """Profile property file parse failed."""
 
-    def __init__(self, dirpath, filename, error):
-        self.dirpath, self.filename, self.error = dirpath, filename, error
+    def __init__(self, filename, error, line=None, lineno=None):
+        if line is not None:
+            assert lineno is not None
+        else:
+            assert lineno is None
+
+        self._filename = filename
+        self._error = error
+        self._line = line
+        self._lineno = lineno
 
     def __str__(self):
-        return f"failed parsing {self.filename!r} in {self.dirpath!r}: {self.error}"
+        ret = "failed parsing %s: %s" % (self._filename, self._error)
+        if self._line is not None:
+            ret += ", line %d: %d" % (self._lineno, self._line)
+        return ret

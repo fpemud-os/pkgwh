@@ -1,8 +1,11 @@
 import os
 from snakeoil import klass
-from snakeoil.osutils import pjoin
+from snakeoil.osutils import abspath, pjoin
 from snakeoil.bash import iter_read_bash, read_bash_dict
+from ...core._pkg_wildcard import PkgWildcard
 from ...errors import ProfileNotExistError
+from ...errors import ProfileParseError
+from ...errors import InvalidPkgWildcard
 
 
 class Profile(metaclass=klass.immutable_instance):
@@ -29,41 +32,41 @@ class Profile(metaclass=klass.immutable_instance):
         # TODO: get profile-set support into PMS
         profile_set = 'profile-set' in self._repo.profile_formats
         relpath = self._property_file_path("packages")
-        sys, neg_sys, pro, neg_pro = [], [], [], []
-        neg_wildcard = False
+        sys, neg_sys, pro, neg_pro, neg_wildcard = [], [], [], [], False
         for line, lineno in self._read_profile_property_file(relpath):
             try:
                 if line[0] == '-':
                     if line == '-*':
                         neg_wildcard = True
                     elif line[1] == '*':
-                        neg_sys.append(self.eapi_atom(line[2:]))
+                        neg_sys.append(PkgWildcard(line[2:]))
                     elif profile_set:
-                        neg_pro.append(self.eapi_atom(line[1:]))
+                        neg_pro.append(PkgWildcard(line[1:]))
                     else:
-                        logger.error(f'{relpath!r}: invalid line format, line {lineno}: {line!r}')
+                        raise ProfileParseError(relpath, "invalid line format", line=line, lineno=lineno)
                 else:
                     if line[0] == '*':
-                        sys.append(self.eapi_atom(line[1:]))
+                        sys.append(PkgWildcard(line[1:]))
                     elif profile_set:
-                        pro.append(self.eapi_atom(line))
+                        pro.append(PkgWildcard(line))
                     else:
-                        logger.error(f'{relpath!r}: invalid line format, line {lineno}: {line!r}')
-            except ebuild_errors.MalformedAtom as e:
-                logger.error(f'{relpath!r}, line {lineno}: parsing error: {e}')
+                        raise ProfileParseError(relpath, "invalid line format", line=line, lineno=lineno)
+            except InvalidPkgWildcard as e:
+                raise ProfileParseError(relpath, f"parsing error: {e}", line=line, lineno=lineno)
         system = [tuple(neg_sys), tuple(sys)]
         profile = [tuple(neg_pro), tuple(pro)]
         if neg_wildcard:
             system.append(neg_wildcard)
             profile.append(neg_wildcard)
-        return _Packages(tuple(system), tuple(profile))
+        return ProfilePackage(tuple(system), tuple(profile))
 
     @klass.jit_attr
     def parent_paths(self):
-        data = self._read_profile_property_file("parents")
+        relpath = self._property_file_path("parents")
+        data = self._read_profile_property_file(relpath)
         if 'portage-2' in self._repo.profile_formats:
             l = []
-            for line, lineno, relpath in data:
+            for line, lineno in data:
                 repo_id, separator, profile_path = line.partition(':')
                 if separator:
                     if repo_id:
@@ -341,6 +344,25 @@ class Profile(metaclass=klass.immutable_instance):
             c.add_bare_global(neg, pos)
         c.freeze()
         return c
+
+
+class ProfilePackage:
+
+    def __init__(self, sys, pro):
+        self.system = sys
+        self.profiles = pro
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 class ProfileStack:
