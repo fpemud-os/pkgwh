@@ -19,12 +19,16 @@ class Profile(metaclass=klass.immutable_instance):
             raise ProfileNotExistError(self._profile_path())
 
     def __str__(self):
-        return f"profile {self._name} for repo {self._repo}"
+        return f"profile of %s at %s" % (self._repo, os.path.join("profiles", self._name))
 
     def __repr__(self):
-        return '<%s repo=%r, name=%r, @%#8x>' % (self.__class__.__name__, self._repo, self._name, id(self))
+        return '<%s repo=%r name=%r, @%#8x>' % (self.__class__.__name__, self._repo, self._name, id(self))
 
     def name(self):
+        return self._name
+
+    def name(self):
+        """Relative path to the profile from the profiles directory."""
         return self._name
 
     @klass.jit_attr
@@ -58,7 +62,7 @@ class Profile(metaclass=klass.immutable_instance):
         if neg_wildcard:
             system.append(neg_wildcard)
             profile.append(neg_wildcard)
-        return ProfilePackage(tuple(system), tuple(profile))
+        return ProfilePackages(tuple(system), tuple(profile))
 
     @klass.jit_attr
     def parent_paths(self):
@@ -101,6 +105,7 @@ class Profile(metaclass=klass.immutable_instance):
                 yield CPV(line)
             except errors.InvalidCPV:
                 raise ParseError(f'invalid package.provided entry: {line}')
+            return tuple((abspath(pjoin(self.path, line)), line, lineno) for line, lineno, relpath in data)
 
     @klass.jit_attr
     def masks(self):
@@ -346,7 +351,7 @@ class Profile(metaclass=klass.immutable_instance):
         return c
 
 
-class ProfilePackage:
+class ProfilePackages:
 
     def __init__(self, sys, pro):
         self.system = sys
