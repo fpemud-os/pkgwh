@@ -25,9 +25,6 @@ class Profile(metaclass=klass.immutable_instance):
         return '<%s repo=%r name=%r, @%#8x>' % (self.__class__.__name__, self._repo, self._name, id(self))
 
     def name(self):
-        return self._name
-
-    def name(self):
         """Relative path to the profile from the profiles directory."""
         return self._name
 
@@ -66,50 +63,29 @@ class Profile(metaclass=klass.immutable_instance):
 
     @klass.jit_attr
     def parent_paths(self):
-        relpath = self._property_file_path("parents")
-        data = self._read_profile_property_file(relpath)
-        if 'portage-2' in self._repo.profile_formats:
-            l = []
-            for line, lineno in data:
+        relpath = self._property_file_path()
+        for line, lineno in self._parse_profile_property_file("parent"):
+            if 'portage-2' in self._repo.profile_formats:
                 repo_id, separator, profile_path = line.partition(':')
                 if separator:
-                    if repo_id:
-                        try:
-                            location = self._repo_map[repo_id]
-                        except KeyError:
-                            # check if requested repo ID matches the current
-                            # repo which could be the case when running against
-                            # unconfigured, external repos.
-                            if repo_id == repo_config.repo_id:
-                                location = repo_config.location
-                            else:
-                                logger.error(
-                                    f'repo {repo_config.repo_id!r}: '
-                                    f"{relpath!r} (line {lineno}), "
-                                    f'bad profile parent {line!r}: '
-                                    f'unknown repo {repo_id!r}'
-                                )
-                                continue
-                    l.append((abspath(pjoin(location, 'profiles', profile_path)), line, lineno))
-                else:
-                    l.append((abspath(pjoin(self.path, repo_id)), line, lineno))
-            return tuple(l)
-        else:
-            return tuple((abspath(pjoin(self.path, line)), line, lineno)
-                        for line, lineno, relpath in data)
+                    if profile_path.find("..") >= 0:
+                        raise ProfileParseError(relpath, "invalid line format", line=line, lineno=lineno)
+                    yield (line, repo_id)
+                    continue
+            yield (abspath(pjoin(self._profile_path(), line)), None)
 
     @klass.jit_attr
     def pkg_provided(self):
-        for line, lineno, relpath in self._read_profile_property_file("package.provided", eapi_optional='profile_pkg_provided'):
+        relpath = self._property_file_path("package.provided")
+        for line, lineno in self._read_profile_property_file(relpath, eapi_optional='profile_pkg_provided'):
             try:
                 yield CPV(line)
             except errors.InvalidCPV:
-                raise ParseError(f'invalid package.provided entry: {line}')
-            return tuple((abspath(pjoin(self.path, line)), line, lineno) for line, lineno, relpath in data)
+                raise ProfileParseError(relpath, "invalid package.provided entry", line=line, lineno=lineno)
 
     @klass.jit_attr
     def masks(self):
-        data = self._read_profile_property_file("package.mask")
+        data = self._read_profile_property_file(self._property_file_path("package.mask"))
         return self._parse_atom_negations(data)
 
     @klass.jit_attr
@@ -296,7 +272,29 @@ class Profile(metaclass=klass.immutable_instance):
         for lineno, line in data:
             yield line, lineno
 
-    def _parse_atom_negations(self):
+    def _parse_profile_property_file(self, filename, eapi_optional=None, fallback=(), parse_func=None):
+        """
+        :filename: str property file name
+        :keyword fallback: What to return if the file does not exist for this profile. Must be immutable.
+        :keyword eapi_optional: If given, the EAPI for this profile node is checked to see if
+            the given optional evaluates to True; if so, then parsing occurs.  If False, then
+            the fallback is returned and no ondisk activity occurs.
+        """
+
+        assert parse_func is not None
+        filepath = self._property_file_path(filename)
+
+        if eapi_optional is not None and not getattr(self.eapi.options, eapi_optional, None):
+            data = fallback
+        else:
+            if not os.path.exists(filepath):
+                data = fallback
+            else:
+                data = iter_read_bash(filepath, enum_line=True)
+        for lineno, line in data:
+            yield parse_func(line, lineno)
+
+    def _parse_atom_negations(self, filepath):
         """Parse files containing optionally negated package atoms."""
         neg, pos = [], []
         for line, lineno, relpath in data:
