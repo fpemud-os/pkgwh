@@ -29,6 +29,9 @@ from .core._pkg_wildcard import InvalidPkgWildcard
 
 from .core._pkg_atom import InvalidPkgAtom
 
-from .repo.profile_stack._profile import ProfileError
-from .repo.profile_stack._profile import ProfileNotExistError
-from .repo.profile_stack._profile import ProfilePropertyFileParseError
+from .repo._repo import RepoError
+from .repo._repo import RepoPropertyFileParseError
+
+from .repo.profiles._profile import ProfileError
+from .repo.profiles._profile import ProfileNotExistError
+from .repo.profiles._profile import ProfilePropertyFileParseError

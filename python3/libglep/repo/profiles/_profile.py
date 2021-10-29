@@ -333,7 +333,7 @@ class Profile(metaclass=klass.immutable_instance):
     @klass.jit_attr
     @property_file_get_path("profile.bashrc")
     def bashrc(self, property_filename, property_filepath):
-        if os.path.exists(property_filepath):
+        if property_filepath is not None:
             return local_source(property_filepath)
         return None
 
