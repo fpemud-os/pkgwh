@@ -241,6 +241,12 @@ class PkgWildcard(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
         return s
 
 
+class InvalidPkgWildcard(ValueError):
+    # FIXME
+    pass
+
+
+
 _alphanum = set(string.digits)
 _alphanum.update(string.ascii_letters)
 

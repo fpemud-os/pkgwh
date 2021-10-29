@@ -159,6 +159,21 @@ class CPV(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
         return (self.category, self.package, self.ver, self.rev)
 
 
+class InvalidCPV(ValueError):
+    """CPV with unsupported characters or format."""
+
+    def __init__(self, cpv_str, err=None):
+        self.atom = cpv_str
+        self.err = err
+        super().__init__(str(self))
+
+    def __str__(self):
+        msg = f'invalid CPV: {self.cpv_str!r}'
+        if self.err is not None:
+            msg += f': {self.err}'
+        return msg
+
+
 def package_fullver_cmp(ver1, rev1, ver2, rev2):
     def cmp(a, b):
         return a > b

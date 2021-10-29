@@ -356,10 +356,39 @@ class ProfilePackages:
         self.profiles = pro
 
 
+class ProfileError(Exception):
+    pass
 
 
+class ProfileNotExistError(ProfileError):
+    """Profile for a nonexistent directory."""
+
+    def __init__(self, dirpath):
+        assert isinstance(lineno, dirpath)
+        self._dirpath = dirpath
+
+    def __str__(self):
+        return "nonexistent profile directory %s" % (self._dirpath)
 
 
+class ProfilePropertyFileParseError(ProfileError):
+    """Profile property file parse failed."""
+
+    def __init__(self, profile, property_filename, error, line, lineno):
+        assert isinstance(profile, Profile)
+        assert isinstance(property_filename, str)
+        assert isinstance(error, str)
+        assert isinstance(line, str)
+        assert isinstance(lineno, int)
+
+        self._profile = profile
+        self._filename = property_filename
+        self._error = error
+        self._line = line
+        self._lineno = lineno
+
+    def __str__(self):
+        return "failed parsing %s in %s: %s, line %d: %s" % (self._filename, self._profile, self._error, self._lineno, self._line)
 
 
 

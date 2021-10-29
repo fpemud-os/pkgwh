@@ -83,6 +83,21 @@ class CP(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
         return (self.category, self.package)
 
 
+class InvalidCP(ValueError):
+    """CP with unsupported characters or format."""
+
+    def __init__(self, cp_str, err=None):
+        self.atom = cp_str
+        self.err = err
+        super().__init__(str(self))
+
+    def __str__(self):
+        msg = f'invalid CP: {self.cp_str!r}'
+        if self.err is not None:
+            msg += f': {self.err}'
+        return msg
+
+
 _category_name_re = re.compile(r"^(?:[a-zA-Z0-9][-a-zA-Z0-9+._]*(?:/(?!$))?)+$")                       # FIXME: change to lazy+compile + weak-ref, snakeoil.demandload.demand_compile_regexp() doesn't have variable form
 
 _package_name_re = re.compile(r"^[a-zA-Z0-9+_]+$")                                                     # FIXME: change to lazy+compile + weak-ref? test performance first

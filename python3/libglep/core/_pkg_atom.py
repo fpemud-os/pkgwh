@@ -320,6 +320,20 @@ class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
         return s
 
 
+class InvalidPkgAtom(ValueError):
+    """Package atom doesn't follow required specifications."""
+
+    def __init__(self, atom, err=None):
+        self.atom = atom
+        self.err = err
+        super().__init__(str(self))
+
+    def __str__(self):
+        msg = f'invalid package atom: {self.atom!r}'
+        if self.err is not None:
+            msg += f': {self.err}'
+        return msg
+
 
 
 _alphanum = set(string.digits)
