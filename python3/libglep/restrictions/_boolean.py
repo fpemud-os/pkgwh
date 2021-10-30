@@ -5,8 +5,6 @@ collections of restrictions in AND, NAND, OR, NOR, XOR, XNOR style
 operations.
 """
 
-__all__ = ("AndRestriction", "OrRestriction")
-
 from itertools import islice
 
 from snakeoil.klass import cached_hash, generic_equality

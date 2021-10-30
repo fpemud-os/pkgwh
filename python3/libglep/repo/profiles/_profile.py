@@ -412,66 +412,6 @@ class ProfilePackages:
         self.profiles = pro
 
 
-class ProfileError(Exception):
-    pass
-
-
-class ProfileParseError(ProfileError):
-    """Profile parse failed."""
-
-    ERR_NOT_EXIST = 1       # profile for a nonexistent directory
-    ERR_INVALID = 2         # profile directory not valid
-
-    def __init__(self, repo, name, path, err):
-        # no performance concern is needed for exception object
-
-        assert isinstance(repo, Repo)
-        assert isinstance(name, str)
-        assert ininstance(path, str)
-        assert err in [self.ERR_NOT_EXIST, self.ERR_INVALID]
-
-        self._repo = repo
-        self._name = name
-        self._path = path
-        self._err = err
-
-    def __str__(self):
-        if self._err == self.ERR_NOT_EXIST:
-            return "nonexistent profile %s (%s) in %s" % (self._name, self._path, self._repo)
-        elif self._err == self.ERR_INVALID:
-            return "invalid profile %s (%s) in %s" % (self._name, self._path, self._repo)
-        else:
-            assert False
-
-
-class ProfilePropertyFileParseError(ProfileError):
-    """Profile property file parse failed."""
-
-    def __init__(self, profile, property_filename, error, line=None, lineno=None):
-        # no performance concern is needed for exception object
-
-        assert isinstance(profile, Profile)
-        assert isinstance(property_filename, str) and "/" not in property_filename
-        assert isinstance(error, str)
-        if line is not None:
-            assert isinstance(line, str)
-            assert isinstance(lineno, int)
-        else:
-            assert lineno is None
-
-        self._profile = profile
-        self._filename = property_filename
-        self._error = error
-        self._line = line
-        self._lineno = lineno
-
-    def __str__(self):
-        ret = "failed parsing %s in %s: %s" % (self._filename, self._profile, self._error)
-        if line is not None:
-            ret += ", line %d: %s" % (self._lineno, self._line)
-        return ret
-
-
 def _profile_path(repo, profile_name):
     return pjoin(repo.location, "profiles", profile_name)
 
