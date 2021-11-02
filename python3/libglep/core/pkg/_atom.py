@@ -41,7 +41,7 @@ def is_valid_use_flag(s):
     return _valid_use_flag_re.fullmatch(s)
 
 
-class PkgAtom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
+class Atom(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
     """Currently implements gentoo ebuild atom parsing.
 
     :ivar blocks: bool has ! operator

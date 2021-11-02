@@ -41,7 +41,7 @@ def is_valid_use_flag(s):
     return _valid_use_flag_re.fullmatch(s)
 
 
-class PkgWildcard(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
+class Wildcard(klass.SlotsPicklingMixin, metaclass=klass.immutable_instance):
     """Currently implements gentoo package wildcard.
 
     :ivar op: str prefix operator, optional
