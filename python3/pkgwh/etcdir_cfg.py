@@ -38,8 +38,6 @@ class Config(ConfigBase):
 
     DEFAULT_CACHE_DIR = "/var/cache/portage"
 
-    DEFAULT_PKGDB_DIR = "/var/db/pkg"
-
     DEFAULT_TMP_DIR = "/var/tmp/portage"
 
     def __init__(self, cfgdir=DEFAULT_CONFIG_DIR):
@@ -63,8 +61,6 @@ class Config(ConfigBase):
         self._cacheReposDir = os.path.join(self._cacheDir, "repos")
         self._cacheDistfilesDir = os.path.join(self._cacheDir, "distfiles")
         self._cacheDistfilesRoDirList = []
-
-        self._pkgDbDir = self.DEFAULT_PKGDB_DIR
 
         self._tmpDir = self.DEFAULT_TMP_DIR
 
@@ -95,10 +91,6 @@ class Config(ConfigBase):
     @property
     def cache_distfiles_ro_dir_list(self):
         return self._cacheDistfilesRoDirList
-
-    @property
-    def pkg_db_dir(self):
-        return self._pkgDbDir
 
     @property
     def tmp_dir(self):

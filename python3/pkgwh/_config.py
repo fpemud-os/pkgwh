@@ -48,10 +48,6 @@ class ConfigBase:
         raise NotImplementedError()
 
     @property
-    def pkg_db_dir(self):
-        raise NotImplementedError()
-
-    @property
     def tmp_dir(self):
         raise NotImplementedError()
 

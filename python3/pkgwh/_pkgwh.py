@@ -25,26 +25,27 @@ import os
 import glob
 import robust_layer.simple_fops
 
-from ._po import BootMode
-from ._po import KernelType
-from ._po import RescueOsSpec
-from ._config import EtcDirConfig
-from ._exception import RunningEnvironmentError
-
 from ._util import Util
-from ._po import FsLayout
-from ._check import Checker
+from ._config import ConfigBase
+from ._db_vartree import VarTreeRwBase
+
+from .etcdir_cfg import Config
+from .vardir_vartree import VarTreeRw
 
 
 class Pkgwh:
 
-    def __init__(self, cfg=EtcDirConfig()):
-        self._cfg = cfg
-
-        if self._cfg.get_kernel_type() == KernelType.LINUX:
-            self._fsLayout = FsLayout(self)
+    def __init__(self, cfg=None, vartree_rw=None):
+        if cfg is not None:
+            assert isinstance(cfg, ConfigBase)
         else:
-            assert False
+            cfg = Config()
+        if vartree_rw is not None:
+            assert isinstance(vartree_rw, VarTreeRwBase)
+        else:
+            vartree_rw = VarTreeRw()
+
+        self._cfg = cfg
 
         self._repoList = [
             Repo(self, self._cfg.data_repo_dir),
@@ -52,8 +53,7 @@ class Pkgwh:
 
         self._porttree = PortTree(self)
 
-        self._varTree = VarTree(self)
-        self._varTreeWriter = VarTreeWriter(self)
+        self._varTreeRw = vartree_rw
 
     @property
     def config(self):
@@ -71,7 +71,7 @@ class Pkgwh:
     @property
     def vartree(self):
         # installed packages
-        return self._varTree
+        return self._varTreeRw.vartree
 
     def install_package(self, package_atom):
         pass
