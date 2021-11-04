@@ -18,7 +18,7 @@ from snakeoil.osutils import normpath, pjoin
 # goofy set of classes representating the fs objects pkgcore knows of.
 
 __all__ = [
-    "FileEntry", "DirEntry", "fsSymlink", "DevEntry", "FifoEntry"]
+    "FileEntry", "DirEntry", "fsSymlink", "FifoEntry"]
 __all__.extend(
     f"is{x}" for x in ("dir", "reg", "sym", "fifo", "dev", "fs_obj"))
 
@@ -50,16 +50,12 @@ def gen_doc_additions(init, slots):
         "\n".join(_fs_doc[k] for k in _fs_doc if k in slots)
 
 
-class EntryBase:
+class Entry:
     """base class, all extensions must derive from this class"""
 
     __slots__ = ("location", "mtime", "mode", "uid", "gid")
     __attrs__ = __slots__
     __default_attrs__ = {}
-
-    locals().update((x.replace("is", "is_"), False) for x in
-        __all__ if x.startswith("is") and x.islower() and not
-            x.endswith("fs_obj"))
 
     klass.inject_richcmp_methods_from_cmp(locals())
     klass.inject_immutable_instance(locals())
@@ -142,15 +138,13 @@ class _LazyChksums(LazyFullValLoadDict):
     __slots__ = ()
 
 
-class FileEntry(EntryBase):
+class FileEntry(Entry):
 
     """file class"""
 
     __slots__ = ("chksums", "data", "dev", "inode")
-    __attrs__ = EntryBase.__attrs__ + __slots__
+    __attrs__ = Entry.__attrs__ + __slots__
     __default_attrs__ = {"mtime":0, 'dev':None, 'inode':None}
-
-    is_reg = True
 
     def __init__(self, location, chksums=None, data=None, **kwds):
         """
@@ -170,7 +164,7 @@ class FileEntry(EntryBase):
                 chf_types = tuple(get_handlers())
             chksums = _LazyChksums(chf_types, self._chksum_callback)
         kwds["chksums"] = chksums
-        EntryBase.__init__(self, location, **kwds)
+        Entry.__init__(self, location, **kwds)
     gen_doc_additions(__init__, __slots__)
 
     def __repr__(self):
@@ -185,10 +179,10 @@ class FileEntry(EntryBase):
         if 'data' in kwds and ('chksums' not in kwds and
             isinstance(self.chksums, _LazyChksums)):
             kwds['chksums'] = None
-        return EntryBase.change_attributes(self, **kwds)
+        return Entry.change_attributes(self, **kwds)
 
     def _can_be_hardlinked(self, other):
-        if not other.is_reg:
+        if not isinstance(other, FileEntry):
             return False
 
         if None in (self.inode, self.dev):
@@ -200,31 +194,29 @@ class FileEntry(EntryBase):
         return True
 
 
-class DirEntry(EntryBase):
+class DirEntry(Entry):
 
     """dir class"""
 
     __slots__ = ()
-    is_dir = True
 
     def __repr__(self):
         return f"dir:{self.location}"
 
 
-class SymlinkEntry(EntryBase):
+class SymlinkEntry(Entry):
 
     """symlink class"""
 
     __slots__ = ("target",)
-    __attrs__ = EntryBase.__attrs__ + __slots__
-    is_sym = True
+    __attrs__ = Entry.__attrs__ + __slots__
 
     def __init__(self, location, target, **kwargs):
         """
         :param target: string, filepath of the symlinks target
         """
         kwargs["target"] = target
-        EntryBase.__init__(self, location, **kwargs)
+        Entry.__init__(self, location, **kwargs)
     gen_doc_additions(__init__, __slots__)
 
     def change_attributes(self, **kwds):
@@ -260,76 +252,14 @@ class SymlinkEntry(EntryBase):
         return f"symlink:{self.location}->{self.target}"
 
 
-class DevEntry(EntryBase):
-
-    """dev class (char/block objects)"""
-
-    __slots__ = ("major", "minor")
-    __attrs__ = EntryBase.__attrs__ + __slots__
-    __default_attrs__ = {"major":-1, "minor":-1}
-    is_dev = True
-
-    def __init__(self, path, major=-1, minor=-1, **kwds):
-        if kwds.get("strict", True):
-            if major == -1 or minor == -1:
-                raise TypeError(
-                   "major/minor must be specified and positive ints")
-            if not stat.S_IFMT(kwds["mode"]):
-                raise TypeError(
-                    "mode %o: must specify the device type (got %o)" % (
-                        kwds["mode"], stat.S_IFMT(kwds["mode"])))
-            kwds["major"] = major
-            kwds["minor"] = minor
-        else:
-            if major != -1:
-                major = int(major)
-                if major < 0:
-                    raise TypeError(
-                       "major/minor must be specified and positive ints")
-                kwds["major"] = major
-
-            if minor != -1:
-                minor = int(minor)
-                if minor < 0:
-                    raise TypeError(
-                       "major/minor must be specified and positive ints")
-                kwds["minor"] = minor
-
-        EntryBase.__init__(self, path, **kwds)
-
-    def __repr__(self):
-        return f"device:{self.location}"
-
-
-def get_major_minor(stat_inst):
-    """get major/minor from a stat instance
-    :return: major,minor tuple of ints
-    """
-    return ( stat_inst.st_rdev >> 8 ) & 0xff, stat_inst.st_rdev & 0xff
-
-
-class FifoEntry(EntryBase):
+class FifoEntry(Entry):
 
     """fifo class (socket objects)"""
 
     __slots__ = ()
-    is_fifo = True
 
     def __repr__(self):
         return f"fifo:{self.location}"
 
-def mk_check(name):
-    return pretty_docs(post_curry(getattr, 'is_' + name, False),
-        extradocs=("return True if obj is an instance of :obj:`%s`, else False" % name),
-        name=("is" +name)
-        )
 
-isdir    = mk_check('dir')
-isreg    = mk_check('reg')
-issym    = mk_check('sym')
-isfifo   = mk_check('fifo')
-isdev    = mk_check('dev')
-isfs_obj = pretty_docs(post_curry(isinstance, EntryBase), name='isfs_obj',
-    extradocs='return True if obj is an fsBase derived object')
-
-del gen_doc_additions, mk_check
+del gen_doc_additions

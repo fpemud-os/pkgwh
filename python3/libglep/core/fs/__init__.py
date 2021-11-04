@@ -1,1 +1,2 @@
-from ._fs import FileEntry, DirEntry, SymlinkEntry, DevfileEntry, FifoEntry
+from ._entry import Entry
+from ._entry import FileEntry, DirEntry, SymlinkEntry, FifoEntry
