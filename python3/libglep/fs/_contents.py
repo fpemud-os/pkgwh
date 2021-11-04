@@ -29,20 +29,19 @@ offset_rewriter = partial(change_offset_rewriter, '/')
 
 
 def check_instance(obj):
-    if not isinstance(obj, fs.EntryBase):
-        raise TypeError(f"'{obj}' is not a fs.EntryBase deriviative")
+    if not isinstance(obj, fs.fsBase):
+        raise TypeError(f"'{obj}' is not a fs.fsBase deriviative")
     return obj.location, obj
 
 
-class contentsSet(metaclass=generic_equality):
-    """set of :class:`core.fs.fs.EntryBase` objects"""
+class ContentsSet(metaclass=generic_equality):
+    """set of :class:`libglep.fs.EntryBase` objects"""
 
     __attr_comparison__ = ('_dict',)
     __dict_kls__ = dict
 
 
     def __init__(self, initial=None, mutable=True):
-
         """
         :param initial: initial fs objs for this set
         :type initial: sequence
@@ -69,7 +68,7 @@ class contentsSet(metaclass=generic_equality):
         """
         add a new fs obj to the set
 
-        :param obj: must be a derivative of :obj:`pkgcore.fs.fs.EntryBase`
+        :param obj: must be a derivative of :obj:`pkgcore.fs.fs.fsBase`
         """
 
         if not self.mutable:
@@ -77,7 +76,7 @@ class contentsSet(metaclass=generic_equality):
             raise AttributeError(
                 f'{self.__class__} is frozen; no add functionality')
         if not fs.isfs_obj(obj):
-            raise TypeError(f"'{obj}' is not a fs.EntryBase class")
+            raise TypeError(f"'{obj}' is not a fs.fsBase class")
         self._dict[obj.location] = obj
 
     def __delitem__(self, obj):
@@ -85,7 +84,7 @@ class contentsSet(metaclass=generic_equality):
         """
         remove a fs obj to the set
 
-        :type obj: a derivative of :obj:`pkgcore.fs.fs.EntryBase`
+        :type obj: a derivative of :obj:`pkgcore.fs.fs.fsBase`
             or a string location of an obj in the set.
         :raise KeyError: if the obj isn't found
         """
@@ -143,13 +142,13 @@ class contentsSet(metaclass=generic_equality):
         f = fs.isfs_obj
         for x in iterable:
             if not f(x):
-                raise ValueError(f'must be an EntryBase derivative: got {x!r}')
+                raise ValueError(f'must be an fsBase derivative: got {x!r}')
             yield x
 
     def difference(self, other):
         if not hasattr(other, '__contains__'):
             other = set(self._convert_loc(other))
-        return contentsSet((x for x in self if x.location not in other),
+        return ContentsSet((x for x in self if x.location not in other),
             mutable=self.mutable)
 
     def difference_update(self, other):
@@ -162,7 +161,7 @@ class contentsSet(metaclass=generic_equality):
                 rem(x)
 
     def intersection(self, other):
-        return contentsSet((x for x in other if x in self),
+        return ContentsSet((x for x in other if x in self),
             mutable=self.mutable)
 
     def intersection_update(self, other):
@@ -191,7 +190,7 @@ class contentsSet(metaclass=generic_equality):
         return not any(x in other for x in self._dict)
 
     def union(self, other):
-        c = contentsSet(other)
+        c = ContentsSet(other)
         c.update(self)
         return c
 
@@ -202,7 +201,7 @@ class contentsSet(metaclass=generic_equality):
         return len(self._dict)
 
     def symmetric_difference(self, other):
-        c = contentsSet(mutable=True)
+        c = ContentsSet(mutable=True)
         c.update(self)
         c.symmetric_difference_update(other)
         object.__setattr__(c, 'mutable', self.mutable)
@@ -212,7 +211,7 @@ class contentsSet(metaclass=generic_equality):
         if not self.mutable:
             raise TypeError(f'immutable type {self!r}')
         if not hasattr(other, '__contains__'):
-            other = contentsSet(self._ensure_fsbase(other))
+            other = ContentsSet(self._ensure_fsbase(other))
         l = []
         for x in self:
             if x in other:
@@ -323,7 +322,7 @@ class contentsSet(metaclass=generic_equality):
         :param start_point: fs filepath all yielded nodes must be within.
         """
 
-        if isinstance(start_point, fs.EntryBase):
+        if isinstance(start_point, fs.fsBase):
             if start_point.is_sym:
                 start_point = start_point.target
             else:
@@ -351,7 +350,7 @@ class contentsSet(metaclass=generic_equality):
         conflicts_d = {x: x.resolved_target for x in other.iterlinks()}
         # rebuild the targets first; sorted due to the fact that we want to
         # rewrite each node (resolving down the filepath chain)
-        conflicts = sorted(contentsSet(self.iterdirs()).intersection(conflicts_d))
+        conflicts = sorted(ContentsSet(self.iterdirs()).intersection(conflicts_d))
         obj = self.clone()
         while conflicts:
             for conflict in conflicts:
@@ -366,7 +365,7 @@ class contentsSet(metaclass=generic_equality):
 
             # rebuild the targets first; sorted due to the fact that we want to
             # rewrite each node (resolving down the filepath chain)
-            conflicts = sorted(contentsSet(obj.iterdirs()).intersection(conflicts_d))
+            conflicts = sorted(ContentsSet(obj.iterdirs()).intersection(conflicts_d))
         return obj
 
     def add_missing_directories(self, mode=0o775, uid=0, gid=0, mtime=None):
@@ -387,11 +386,11 @@ class contentsSet(metaclass=generic_equality):
             for x in missing)
 
 
-class OrderedContentsSet(contentsSet):
+class OrderedContentsSet(ContentsSet):
 
     def __init__(self, initial=None, mutable=False,
                  add_missing_directories=False):
-        contentsSet.__init__(self, mutable=True)
+        ContentsSet.__init__(self, mutable=True)
         self._dict = OrderedDict()
         if initial:
             self.update(initial)
