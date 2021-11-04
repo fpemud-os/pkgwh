@@ -21,6 +21,7 @@
 # THE SOFTWARE.
 
 
+from abc import ABC
 from enum import Enum, auto
 
 
@@ -29,7 +30,7 @@ class VarTreePackageProperty(Enum):
     REPOSITORY = auto()
     CATEGORY = auto()
 
-    EBUILD_FILE = auto()
+    EBUILD_FILE = auto()                # ebuild file content
     EAPI = auto()
     DESCRIPTION = auto()
     HOMEPAGE = auto()
@@ -66,7 +67,7 @@ class VarTreePackageProperty(Enum):
     PF = auto()                  # FIXME: what is this
 
 
-class VarTreeBase:
+class VarTreeBase(ABC):
 
     def cp_list(self, category=None):                                 # FIXME: should have more advanced query parameter
         raise NotImplementedError()
@@ -78,7 +79,7 @@ class VarTreeBase:
         raise NotImplementedError()
 
 
-class VarTreeRwBase:
+class VarTreeRwBase(ABC):
 
     @property
     def vartree(self):
@@ -103,7 +104,7 @@ class VarTreeRwBase:
         raise NotImplementedError()
 
 
-class VarTreePackageBase:
+class VarTreePackageBase(ABC):
 
     def get_cpv(self):
         raise NotImplementedError()

@@ -1,5 +1,5 @@
 
-class VarTree:
+class PortTreeBase:
 
     def __init__(self, pkgwh):
         self._pkgwh = pkgwh

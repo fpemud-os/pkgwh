@@ -25,17 +25,21 @@ import os
 import glob
 import robust_layer.simple_fops
 
+from python3.pkgwh.fs_porttree import PortTree
+
 from ._util import Util
 from ._config import ConfigBase
+from ._db_porttree import PortTreeBase
 from ._db_vartree import VarTreeRwBase
 
 from .etcdir_cfg import Config
-from .vardir_vartree import VarTreeRw
+from .fs_porttree import PortTree
+from .fs_vartree import VarTreeRw
 
 
 class Pkgwh:
 
-    def __init__(self, cfg=None, vartree_rw=None):
+    def __init__(self, cfg=None, vartree_rw=None, porttree=None):
         if cfg is not None:
             assert isinstance(cfg, ConfigBase)
         else:
@@ -44,16 +48,19 @@ class Pkgwh:
             assert isinstance(vartree_rw, VarTreeRwBase)
         else:
             vartree_rw = VarTreeRw()
+        if porttree is not None:
+            assert isinstance(porttree, PortTreeBase)
+        else:
+            porttree = PortTree()
 
         self._cfg = cfg
+        self._porttree = porttree
+        self._varTreeRw = vartree_rw
 
         self._repoList = [
             Repo(self, self._cfg.data_repo_dir),
         ]
 
-        self._porttree = PortTree(self)
-
-        self._varTreeRw = vartree_rw
 
     @property
     def config(self):
