@@ -21,7 +21,7 @@
 # THE SOFTWARE.
 
 """
-bbki
+pkgwh
 
 @author: Fpemud
 @license: GPLv3 License
@@ -45,6 +45,10 @@ from ._config import EtcDirConfig
 
 from ._repo import Repo
 from ._repo import RepoAtom
+
+from ._vartree import VarTree
+from ._vartree import VarTreePackage
+
 
 from ._exception import RunningEnvironmentError
 from ._exception import ConfigError

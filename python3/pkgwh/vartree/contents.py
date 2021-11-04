@@ -1,4 +1,3 @@
-__all__ = ("LookupFsDev", "ContentsFile")
 
 import os
 import stat
@@ -12,48 +11,19 @@ from ..fs import fs
 from ..fs.contents import ContentsSet
 
 
-class LookupFsDev(fs.fsDev):
-
-    __slots__ = ()
-
-    def __init__(self, path, **kwds):
-        if any(x not in kwds for x in ("major", "minor", "mode")):
-            try:
-                st = os.lstat(path)
-            except FileNotFoundError:
-                st = None
-            if st is None or any(f(st.st_mode) for f in
-                (stat.S_ISREG, stat.S_ISDIR, stat.S_ISFIFO)):
-                kwds["strict"] = True
-            else:
-                major, minor = fs.get_major_minor(st)
-                kwds["major"] = major
-                kwds["minor"] = minor
-                kwds["mode"] = st.st_mode
-        super().__init__(path, **kwds)
-
-
-class ContentsFile(ContentsSet):
+class ContentsFile:
     """class wrapping a contents file"""
 
-    def __init__(self, source, mutable=False, create=False):
+    def __init__(self, path):
+        self._path = path
 
-        if not isinstance(source, (data_source.base, str)):
-            raise TypeError("source must be either data_source, or a filepath")
-        super().__init__(mutable=True)
-        self._source = source
+    def read(self):
+        return None
 
-        if not create:
-            self.update(self._iter_contents())
+    def write(self, entry_set):
 
-        self.mutable = mutable
+        return AtomicWriteFile(self._path, uid=os_data.root_uid, gid=os_data.root_gid, perms=0o644)
 
-    def clone(self, empty=False):
-        # create is used to block it from reading.
-        cset = self.__class__(self._source, mutable=True, create=True)
-        if not empty:
-            cset.update(self)
-        return cset
 
     def add(self, obj):
         if obj.is_reg:

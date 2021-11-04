@@ -50,6 +50,11 @@ class Pkgwh:
             Repo(self, self._cfg.data_repo_dir),
         ]
 
+        self._porttree = PortTree(self)
+
+        self._varTree = VarTree(self)
+        self._varTreeWriter = VarTreeWriter(self)
+
     @property
     def config(self):
         return self._cfg
@@ -58,11 +63,15 @@ class Pkgwh:
     def repositories(self):
         return self._repoList
 
-    def get_package_tree(self, including_masked=False):
-        raise NotImplementedError()
+    @property
+    def porttree(self):
+        # combines all repositories
+        return self._porttree
 
-    def get_installed_package_tree(self):
-        raise NotImplementedError()
+    @property
+    def vartree(self):
+        # installed packages
+        return self._varTree
 
     def install_package(self, package_atom):
         pass
