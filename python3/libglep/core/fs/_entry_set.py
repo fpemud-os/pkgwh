@@ -34,7 +34,7 @@ def check_instance(obj):
     return obj.location, obj
 
 
-class ContentsSet(set):
+class EntrySet(set):
     """set of :class:`core.fs.Entry` objects"""
 
     __attr_comparison__ = ('_dict',)
@@ -160,7 +160,7 @@ class ContentsSet(set):
         conflicts_d = {x: x.resolved_target for x in other.iterlinks()}
         # rebuild the targets first; sorted due to the fact that we want to
         # rewrite each node (resolving down the filepath chain)
-        conflicts = sorted(ContentsSet(self.iter_dirs()).intersection(conflicts_d))
+        conflicts = sorted(EntrySet(self.iter_dirs()).intersection(conflicts_d))
         obj = self.clone()
         while conflicts:
             for conflict in conflicts:
@@ -175,7 +175,7 @@ class ContentsSet(set):
 
             # rebuild the targets first; sorted due to the fact that we want to
             # rewrite each node (resolving down the filepath chain)
-            conflicts = sorted(ContentsSet(obj.iter_dirs()).intersection(conflicts_d))
+            conflicts = sorted(EntrySet(obj.iter_dirs()).intersection(conflicts_d))
         return obj
 
     def add_missing_directories(self, mode=0o775, uid=0, gid=0, mtime=None):
